@@ -1,17 +1,19 @@
-# Enable daily IANA timezone catalog updates
+# Habilitar las actualizaciones diarias del catálogo de zonas horarias de IANA
 
-**Apply the SQL yourself, deploy the protected function, test one sync, then enable
-the daily job.** Nothing here has connected to your Supabase project, executed SQL,
-deployed a function, or activated Cron. Your remote database state is unknown.
-The relay works from its bundled fallback until a validated snapshot is available.
+**Aplique el SQL personalmente, despliegue la función protegida, pruebe una
+sincronización y después habilite la tarea diaria.** Nada de lo descrito aquí ha
+conectado con su proyecto Supabase, ejecutado SQL, desplegado una función ni activado
+Cron. Se desconoce el estado de su base de datos remota. El recorrido funciona con
+los datos de respaldo incluidos hasta que haya una instantánea validada disponible.
 
-## 1. Confirm the database prerequisites
+## 1. Confirmar los requisitos previos de la base de datos
 
-Complete [stream setup](streaming-setup.md#quick-path) using your **existing Auth
-user**, not a new account. Keep signup disabled. The stream migration must precede
-the timezone migration because diagnostics use `stream_admins` membership.
+Complete la [configuración de transmisiones](streaming-setup.md#pasos-rápidos) con
+su **usuario existente de Auth**, no con una cuenta nueva. Mantenga el registro
+deshabilitado. La migración de transmisiones debe preceder a la de zonas horarias
+porque los diagnósticos usan la membresía de `stream_admins`.
 
-Run this read-only precheck in SQL Editor:
+Ejecute esta comprobación previa de solo lectura en SQL Editor:
 
 ```sql
 select to_regclass('public.stream_admins') as stream_admins,
@@ -20,71 +22,122 @@ select to_regclass('public.stream_admins') as stream_admins,
        to_regclass('public.timezone_sync_status') as timezone_sync_status;
 ```
 
-Once the stream prerequisites exist and **both timezone objects are absent**, run
-[`202609130002_timezone_catalog.sql`](../supabase/migrations/202609130002_timezone_catalog.sql)
-once as owner. Record the applied version. If either timezone object already exists,
-stop and reconcile migration history and definitions; do not drop tables or blindly
-rerun a versioned migration. No seed catalog or fake success is inserted.
+Como propietario, aplique las migraciones en este orden y registre cada versión aplicada:
 
-## 2. Configure and deploy the Edge Function
+| Estado de la instalación | Orden de aplicación |
+| --- | --- |
+| Instalación nueva; faltan ambos objetos de zonas horarias | Complete la migración de transmisiones **001**, después la migración de zonas horarias [**002**](../supabase/migrations/202609130002_timezone_catalog.sql) y luego la corrección de validación de la fuente [**003**](../supabase/migrations/202609130003_timezone_catalog_source_validation.sql), antes de la primera sincronización o de activar Cron. |
+| Ya se confirmó la aplicación de la migración de zonas horarias 002 | Aplique **solo 003**; no vuelva a ejecutar 002 ni a crear las tablas. |
+| Ya se confirmó la aplicación de 003 | Ejecute las comprobaciones de regresión y auditoría siguientes; no es necesario volver a ejecutar ninguna migración. |
+| Se desconocen las versiones aplicadas o solo existen algunos de los objetos esperados | Deténgase y concilie primero el historial y las definiciones de las migraciones. La mera existencia de los objetos no identifica la versión instalada del validador. |
 
-1. Generate a private random secret (at least 32 random bytes encoded as hex, 64
-   characters; maximum accepted length 256) with your password manager.
-2. In **Edge Functions → Secrets**, set `TIMEZONE_SYNC_SECRET` to that value.
-   Never put it in a public variable, source file, chat, or committed SQL.
-3. The worker uses the platform-provided `SUPABASE_URL` and
-   `SUPABASE_SERVICE_ROLE_KEY`. Confirm these built-in variables are available for
-   your function. This implementation requires that service-role JWT; it does not
-   treat a modern `sb_secret_` key as a JWT. Do not copy it into the Next.js app.
-4. From this checkout, with a Supabase CLI you independently installed and an
-   account/session you explicitly choose, run the manual deployment command below.
-   Authenticate yourself if needed; no agent should discover or reuse a session.
+La migración 002 se conserva sin cambios por compatibilidad con el historial de
+migraciones aplicadas. **003 es obligatoria incluso en instalaciones nuevas:**
+reemplaza solo el validador y conserva sus privilegios, las tablas, las políticas,
+las RPC de publicación y las programaciones existentes. Rechaza una fuente JSON-null
+mediante comparaciones de tipo y valor seguras frente a NULL. La comprobación de
+claves obligatorias ya rechazaba las claves ausentes. Ninguna de las dos migraciones
+publica un catálogo inicial ni de reemplazo.
+
+### Comprobar la corrección sin publicar datos de prueba
+
+Después de 003, ejecute manualmente
+[`timezone-catalog-source-regression.sql`](../supabase/manual/timezone-catalog-source-regression.sql)
+como propietario. Usa un catálogo **sintético** de 350 zonas, válido en los demás
+aspectos, que solo se mantiene en variables SQL locales. Comprueba que la fuente
+oficial exacta se acepte y que las fuentes ausentes, JSON-null, de tipo distinto
+de cadena o incorrectas se rechacen; también verifica las comprobaciones relacionadas
+de campos obligatorios y tipos. Las aserciones usan `IS DISTINCT FROM`, por lo que
+un resultado SQL NULL no puede contarse como satisfactorio. El archivo se ejecuta
+en una transacción de solo lectura y termina con `ROLLBACK`; no inserta filas ni
+llama a las RPC de publicación. Si una aserción interrumpe el script antes de su
+última instrucción, ejecute `ROLLBACK` por separado. Estas comprobaciones SQL **no**
+se han ejecutado como parte de la corrección local; las pruebas de Node no demuestran
+el comportamiento de la base de datos.
+
+Reemplazar una función no vuelve a validar automáticamente las filas existentes
+contra su restricción CHECK. Después de aplicar 003, ejecute esta auditoría
+independiente de solo lectura:
+
+```sql
+select id from public.timezone_catalog
+where public.valid_timezone_catalog(catalog) is not true;
+```
+
+Se espera que no devuelva filas. Si devuelve alguna, no considere validada la
+instantánea almacenada ni continúe con la primera sincronización o activación;
+coordine una corrección explícita revisada por el propietario. Esta corrección no
+elimina, reetiqueta ni repara silenciosamente los datos existentes. Su transacción
+se revierte si falla la migración; una vez aplicada, no vuelva al validador de 002,
+ya que reabriría el fallo que permite una fuente nula. Aplicar únicamente esta
+corrección SQL no requiere volver a desplegar Edge ni activar Cron.
+
+## 2. Configurar y desplegar la Edge Function
+
+1. Genere un secreto aleatorio privado con su gestor de contraseñas (al menos 32 bytes
+   aleatorios codificados en hexadecimal, 64 caracteres; longitud máxima aceptada: 256).
+2. En **Edge Functions → Secrets**, asigne ese valor a `TIMEZONE_SYNC_SECRET`.
+   Nunca lo incluya en una variable pública, un archivo fuente, un chat ni SQL
+   registrado en un commit.
+3. El proceso usa `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY`, proporcionadas por la
+   plataforma. Confirme que estas variables integradas estén disponibles para su
+   función. Esta implementación requiere ese JWT de service-role; no trata una clave
+   moderna `sb_secret_` como un JWT. No lo copie en la aplicación Next.js.
+4. Desde esta copia del repositorio, con una CLI de Supabase que haya instalado por
+   su cuenta y una cuenta o sesión que elija explícitamente, ejecute el siguiente
+   comando de despliegue manual. Autentíquese personalmente si es necesario; ningún
+   agente debe descubrir ni reutilizar una sesión.
 
 ```sh
 # Manual only: replace the placeholder locally. Do not run db push.
 supabase functions deploy timezone-sync --project-ref <your-project-ref> --no-verify-jwt
 ```
 
-`supabase/config.toml` disables gateway JWT verification **only for this function**.
-The handler requires `x-timezone-sync-secret` and checks it before any database
-operation. A publishable key or ordinary Auth JWT alone cannot trigger sync. No
-CORS access or body-supplied source URL is supported. Keep this application-level
-check when changing deployment settings. Rotate the secret in both Edge Secrets
-and Vault together; a mismatch safely produces HTTP 401.
+`supabase/config.toml` deshabilita la verificación JWT de la puerta de enlace
+**solo para esta función**. El manejador exige `x-timezone-sync-secret` y lo verifica
+antes de cualquier operación de base de datos. Una clave publicable o un JWT normal
+de Auth por sí solos no pueden iniciar la sincronización. No se admite acceso CORS
+ni una URL de origen proporcionada en el cuerpo. Conserve esta comprobación de la
+aplicación al cambiar la configuración del despliegue. Rote el secreto en Edge Secrets
+y Vault al mismo tiempo; una discrepancia produce HTTP 401 de forma segura.
 
-**Privilege boundary:** the service-role key has project-wide privileged access.
-It is not a least-privilege worker credential. This migration revokes direct writes
-to these two tables and grants only the publication RPCs to `service_role`, but
-that does not reduce the key's authority elsewhere in the project. Protect Edge
-deployment/secret access accordingly. Anonymous and ordinary authenticated clients
-cannot write the catalog or invoke either RPC.
+**Límite de privilegios:** la clave de service-role tiene acceso privilegiado a todo
+el proyecto. No es una credencial de mínimos privilegios para este proceso. Esta
+migración revoca las escrituras directas en estas dos tablas y concede a `service_role`
+solo las RPC de publicación, pero eso no reduce la autoridad de la clave en otras
+partes del proyecto. Proteja en consecuencia el acceso al despliegue y a los secretos
+de Edge. Los clientes anónimos y los autenticados normales no pueden escribir en
+el catálogo ni invocar ninguna de las dos RPC.
 
-## 3. Enable extensions, Vault, and the first sync
+## 3. Habilitar las extensiones, Vault y la primera sincronización
 
-In **Database → Extensions**, enable `pg_cron` (Supabase Cron) and `pg_net`. If using
-SQL Editor instead, run as owner:
+En **Database → Extensions**, habilite `pg_cron` (Supabase Cron) y `pg_net`. Si usa
+SQL Editor en su lugar, ejecute como propietario:
 
 ```sql
 create extension if not exists pg_cron;
 create extension if not exists pg_net with schema extensions;
 ```
 
-Open **Vault** in the dashboard and confirm it is available (`supabase_vault` is
-the extension behind it). If unavailable, enable it through the project's extension
-UI before continuing. Do not grant app roles access to `vault.decrypted_secrets`.
-Use the Vault UI to create these three unique names, or update their existing values:
+Abra **Vault** en el panel y confirme que esté disponible (`supabase_vault` es la
+extensión que lo sustenta). Si no está disponible, habilítelo desde la interfaz
+de extensiones del proyecto antes de continuar. No conceda a los roles de la aplicación
+acceso a `vault.decrypted_secrets`. Use la interfaz de Vault para crear estos tres
+nombres únicos o actualizar sus valores existentes:
 
-| Vault name | Value you enter privately |
+| Nombre en Vault | Valor que debe introducir de forma privada |
 | --- | --- |
-| `timezone_project_url` | Your project HTTPS URL, without trailing slash |
-| `timezone_publishable_key` | Your public `sb_publishable_` key |
-| `timezone_sync_secret` | Exactly the `TIMEZONE_SYNC_SECRET` from Edge Secrets |
+| `timezone_project_url` | La URL HTTPS de su proyecto, sin barra final |
+| `timezone_publishable_key` | Su clave pública `sb_publishable_` |
+| `timezone_sync_secret` | Exactamente el `TIMEZONE_SYNC_SECRET` de Edge Secrets |
 
-Vault and Edge Secrets are separate stores; adding a value to one does not populate
-the other. The Cron command references Vault names, never literal credentials.
+Vault y Edge Secrets son almacenes separados; añadir un valor a uno no lo añade
+al otro. El comando de Cron hace referencia a nombres de Vault, nunca a credenciales
+literales.
 
-**First sync:** manually run this SQL after deployment. This makes an external HTTP
-request from your database; it is not a read-only precheck.
+**Primera sincronización:** ejecute manualmente este SQL después del despliegue.
+Esto realiza una solicitud HTTP externa desde su base de datos; no es una
+comprobación previa de solo lectura.
 
 ```sql
 select net.http_post(
@@ -100,8 +153,9 @@ select net.http_post(
 ) as request_id;
 ```
 
-The returned ID means **queued**, not synced. In a subsequent SQL Editor query,
-inspect the response for that ID and verify persisted success:
+El ID devuelto significa **en cola**, no sincronizado. En una consulta posterior
+de SQL Editor, inspeccione la respuesta de ese ID y verifique que el éxito haya
+quedado registrado de forma persistente:
 
 ```sql
 select id, status_code, timed_out from net._http_response
@@ -116,18 +170,20 @@ select last_attempt_at, last_success_at, last_error,
 from public.timezone_sync_status;
 ```
 
-Expect HTTP 200, an actual IANA version, and non-null success/check timestamps.
-There is intentionally no secret or upstream response body in the status row.
-HTTP responses in `pg_net` are temporary; the one-row status is the durable summary.
-SQL Editor owner access bypasses RLS; separately verify the roles below.
+Se espera HTTP 200, una versión real de IANA y marcas de tiempo de éxito y comprobación
+no nulas. La fila de estado no contiene secretos ni el cuerpo de respuesta del origen,
+de forma deliberada. Las respuestas HTTP de `pg_net` son temporales; el estado de
+una sola fila es el resumen persistente. El acceso como propietario en SQL Editor
+omite RLS; verifique por separado los roles indicados más abajo.
 
-## 4. Activate the daily schedule
+## 4. Activar la programación diaria
 
-After a successful first sync, execute
+Después de una primera sincronización correcta, ejecute
 [`supabase/manual/timezone-cron.sql`](../supabase/manual/timezone-cron.sql).
-It replaces only the `timezone-iana-daily` job, so reruns do not create duplicates.
-It runs at **03:15 UTC daily** on Supabase's default UTC Cron configuration. If your
-project changed the Cron timezone, restore/confirm UTC or adjust the schedule.
+Reemplaza solo la tarea `timezone-iana-daily`, por lo que volver a ejecutarlo no crea
+duplicados. Se ejecuta **todos los días a las 03:15 UTC** con la configuración UTC
+predeterminada de Cron en Supabase. Si se cambió la zona horaria de Cron en su
+proyecto, restaure o confirme UTC, o ajuste la programación.
 
 ```sql
 -- Read-only schedule check (does not print credentials):
@@ -138,64 +194,73 @@ where jobname = 'timezone-iana-daily';
 select cron.unschedule(jobid) from cron.job where jobname = 'timezone-iana-daily';
 ```
 
-Monitor `last_success_at`; alert operationally if it is older than 48 hours. No
-external alert delivery is implemented. A stale in-progress token after a crash
-expires after two minutes; a subsequent invocation can recover without deleting
-data. Do not infer HTTP success from Cron's SQL job success alone.
+Supervise `last_success_at`; genere una alerta operativa si tiene más de 48 horas
+de antigüedad. No se ha implementado el envío de alertas externas. Un token de
+ejecución pendiente tras una caída caduca después de dos minutos; una invocación
+posterior puede recuperarse sin eliminar datos. No deduzca el éxito HTTP únicamente
+del éxito de la tarea SQL de Cron.
 
-## Data, safety, and freshness contract
+## Contrato de datos, seguridad y vigencia
 
-| Concern | Behavior |
+| Aspecto | Comportamiento |
 | --- | --- |
-| Upstream | One HTTPS `https://data.iana.org/time-zones/tzdata-latest.tar.gz` archive; redirects rejected. Its own `version`, `zone.tab`, `iso3166.tab`, and `backward` stay version-coherent. No HTML scraping, TimeZoneDB, or mirror. |
-| Parsing | Native streaming gzip plus a read-only ustar parser; no new dependency or filesystem extraction. 25-second upstream/decompression deadline, 2 MB compressed, 8 MB expanded, 1 MB/file, 100 members. Checks tar checksum, regular-file type, names, required members and UTF-8; unsupported archive layouts fail closed. |
-| Catalog | At least 350 places, at most 1,000, at least 200 country definitions in upstream, at most 256 KB JSON. SQL also checks exact keys, types, unique names, safe labels, nonempty count and timestamps. |
-| Place coverage | `zone.tab` is IANA's deprecated compatibility table, deliberately used for this existing per-country city board. `zone1970.tab` alone consolidates places away. Old names survive only through official metadata or proven `backward` links; no arbitrary alias expansion. Existing verified country labels are retained. |
-| Publication | DB-clock two-minute lease; only its current token may finish. Validation, version ordering, prior coverage and publication are atomic. An expired/replaced attempt cannot overwrite newer data or success metadata. Same-version changed JSON is rejected; unchanged versions update `checked_at`/`last_success_at` without replacing JSON or `fetched_at`. |
-| Failure | Parse, coverage, version or fetch failure retains the last-good snapshot. Codes are bounded and sanitized. A database outage may prevent attempt/error recording too; absence of a new error is not proof of health. |
-| App reads | `/road-to` is dynamic. Server-only anonymous REST read, no-store, four-second deadline, bounded body, whole-snapshot and baseline coverage validation. Missing config/table/row, denied/network/corrupt responses fall back to `data/timezones.json`; none proves a table is absent. |
-| Open board | `router.refresh()` every five minutes while visible and when returning to the tab; no full-page reload. Existing client state, null hydration values and 30-second clock are unchanged. Hidden tabs skip refresh; offline tabs cannot receive new data until connectivity returns. |
-| Last-good age | A valid older snapshot stays usable during upstream outages; it is not silently labeled fresh. There is no indefinite application fetch cache. Admin SQL diagnostics distinguish real daily checks from the original fetch. |
+| Origen | Un único archivo HTTPS `https://data.iana.org/time-zones/tzdata-latest.tar.gz`; se rechazan las redirecciones. Sus propios `version`, `zone.tab`, `iso3166.tab` y `backward` mantienen la coherencia de versión. No se extraen datos de HTML ni se usa TimeZoneDB o un servidor espejo. |
+| Análisis | Descompresión gzip nativa en flujo y un analizador ustar de solo lectura; sin nuevas dependencias ni extracción al sistema de archivos. Límite de 25 segundos para origen/descompresión, 2 MB comprimidos, 8 MB descomprimidos, 1 MB/archivo, 100 entradas. Se comprueban la suma de verificación tar, el tipo de archivo regular, los nombres, las entradas obligatorias y UTF-8; las estructuras de archivo no compatibles se rechazan de forma segura. |
+| Catálogo | Al menos 350 lugares, como máximo 1,000, al menos 200 definiciones de países en el origen, como máximo 256 KB de JSON. SQL también comprueba claves exactas, tipos, nombres únicos, etiquetas seguras, cantidad no vacía y marcas de tiempo. |
+| Cobertura de lugares | `zone.tab` es la tabla de compatibilidad obsoleta de IANA, usada deliberadamente para este tablero existente de ciudades por país. Usar solo `zone1970.tab` agrupa lugares y elimina entradas individuales. Los nombres antiguos se conservan solo mediante metadatos oficiales o enlaces `backward` comprobados; no se amplían los alias arbitrariamente. Se conservan las etiquetas de países existentes y verificadas. |
+| Publicación | Reserva de ejecución de dos minutos según el reloj de la base de datos; solo su token vigente puede finalizar. La validación, el orden de versiones, la cobertura previa y la publicación son atómicos. Un intento caducado o reemplazado no puede sobrescribir datos ni metadatos de éxito más recientes. Se rechaza un JSON modificado con la misma versión; las versiones sin cambios actualizan `checked_at`/`last_success_at` sin reemplazar el JSON ni `fetched_at`. |
+| Fallo | Un fallo de análisis, cobertura, versión u obtención conserva la última instantánea válida. Los códigos están acotados y saneados. Una caída de la base de datos también puede impedir registrar el intento o error; la ausencia de un error nuevo no demuestra un funcionamiento correcto. |
+| Lecturas de la aplicación | `/road-to` es dinámico. Lectura REST anónima solo desde el servidor, no-store, límite de cuatro segundos, cuerpo acotado y validación de la instantánea completa y de la cobertura base. Si faltan configuración/tabla/fila o hay respuestas denegadas, errores de red o respuestas corruptas, se recurre a `data/timezones.json`; ninguno de estos casos demuestra que falte una tabla. |
+| Tablero abierto | `router.refresh()` cada cinco minutos mientras está visible y al volver a la pestaña; sin recargar toda la página. No cambian el estado existente del cliente, los valores nulos de hidratación ni el reloj de 30 segundos. Las pestañas ocultas omiten la actualización; las pestañas sin conexión no pueden recibir datos nuevos hasta que se restablezca la conectividad. |
+| Antigüedad de la última instantánea válida | Una instantánea anterior válida sigue siendo utilizable durante interrupciones del origen; no se etiqueta silenciosamente como reciente. No hay una caché indefinida de obtención en la aplicación. Los diagnósticos SQL de administración distinguen las comprobaciones diarias reales de la obtención original. |
 
-### Explicit baseline correction
+### Corrección explícita de los datos base
 
-The official 2026d archive check identified exactly one preexisting country mismatch:
-`Africa/El_Aaiun` was `MA`/Morocco in the bundled file; IANA `zone.tab` assigns `EH`,
-and `iso3166.tab` calls it Western Sahara. This change corrects **that one record**
-in `data/timezones.json`; the existing `eh.svg` flag is present. All 408 bundled names
-then passed coverage, producing 418 places from that archive. This follows IANA's
-catalog convention, not a position on territorial claims. Other future country
-remaps remain blocked for explicit review. The original bundled dataset's overall
-origin/license remains unverified; this does not retroactively establish provenance
-for all its records. `public/data/timezones.json` is an unused duplicate, not updated.
+La comprobación del archivo oficial 2026d identificó exactamente una discrepancia
+de país preexistente: `Africa/El_Aaiun` figuraba como `MA`/Morocco (Marruecos) en el archivo
+incluido; `zone.tab` de IANA asigna `EH` e `iso3166.tab` lo denomina Western Sahara
+(Sáhara Occidental). Este cambio corrige **ese único registro** en `data/timezones.json`;
+la bandera existente `eh.svg` está presente. Después, los 408 nombres incluidos
+superaron la comprobación de cobertura, con 418 lugares obtenidos de ese archivo.
+Esto sigue la convención del catálogo de IANA, no expresa una posición sobre
+reclamaciones territoriales. Otras reasignaciones futuras de países siguen bloqueadas
+hasta una revisión explícita. El origen y la licencia generales del conjunto de datos
+original incluido siguen sin verificarse; esto no establece retroactivamente la
+procedencia de todos sus registros. `public/data/timezones.json` es un duplicado
+sin uso y no se ha actualizado.
 
-**Catalog updates do not update timezone rules in Node/ICU or browsers.** The relay
-still calculates January 1, 2027 arrivals using runtime `Intl`, never stored current
-offsets. Keep the hosting runtime/ICU and browsers updated separately. Unsupported
-new IANA names are skipped rather than assigned fabricated offsets; supported names
-use the existing final-name-segment city label and country flag path. A newly added
-country may need a new SVG asset; its country text remains available as image alt.
+**Las actualizaciones del catálogo no actualizan las reglas de zonas horarias en
+Node/ICU ni en los navegadores.** El recorrido sigue calculando las llegadas del
+1 de enero de 2027 con `Intl` del entorno de ejecución, nunca con desfases actuales
+almacenados. Mantenga actualizados por separado el entorno de ejecución/ICU del
+alojamiento y los navegadores. Los nombres nuevos de IANA no compatibles se omiten
+en lugar de asignarles desfases inventados; los compatibles usan la etiqueta de ciudad
+existente basada en el último segmento del nombre y la ruta de la bandera del país.
+Un país recién añadido puede necesitar un nuevo recurso SVG; su texto de país sigue
+disponible como texto alternativo de la imagen.
 
-## Verification before relying on automation
+## Verificación antes de depender de la automatización
 
-Run these checks yourself in an isolated authorized backend environment; local
-mocked tests do **not** prove deployed SQL, Cron, gateway auth, or Edge runtime behavior:
+Ejecute personalmente estas comprobaciones en un entorno de backend aislado y
+autorizado; las pruebas locales con simulaciones **no** demuestran el comportamiento
+del SQL desplegado, Cron, la autenticación de la puerta de enlace ni el entorno
+de ejecución Edge:
 
-| Check | Expected |
+| Comprobación | Resultado esperado |
 | --- | --- |
-| Anonymous catalog SELECT | Only the validated one-row catalog; no sync diagnostics |
-| Ordinary authenticated diagnostics SELECT | No rows without `stream_admins` membership |
-| Existing admin diagnostics SELECT | Operational timestamps/error code readable |
-| Anonymous/authenticated catalog/status write or RPC invocation | Permission denied |
-| HTTP without/wrong sync secret, including a valid ordinary user JWT | 401, no new attempt |
-| Two overlapping invocations | One owns lease; other gets 409 |
-| Old token finishes after lease replacement | `stale_attempt`, no data/status regression |
-| Invalid JSON, coverage loss, older version | Prior catalog/fetched/check/success preserved; bounded error recorded |
-| Same version, same catalog | Only check/success times advance |
-| Same version, changed catalog | `same_version_changed`, old catalog retained |
-| Reload `/road-to`, then leave open for five minutes | Persisted catalog used; state/scroll retained during refresh |
+| SELECT anónimo del catálogo | Solo el catálogo validado de una fila; sin diagnósticos de sincronización |
+| SELECT de diagnósticos con autenticación normal | Sin filas si no hay membresía de `stream_admins` |
+| SELECT de diagnósticos de un administrador existente | Marcas de tiempo operativas y código de error legibles |
+| Escritura de catálogo/estado o invocación de RPC anónima/autenticada | Permiso denegado |
+| HTTP sin secreto de sincronización o con uno incorrecto, incluso con un JWT válido de usuario normal | 401, sin intento nuevo |
+| Dos invocaciones superpuestas | Una obtiene la reserva; la otra recibe 409 |
+| Un token antiguo finaliza después de reemplazar la reserva | `stale_attempt`, sin regresión de datos ni estado |
+| JSON no válido, pérdida de cobertura, versión anterior | Se conservan el catálogo y las marcas de obtención/comprobación/éxito anteriores; se registra un error acotado |
+| Misma versión, mismo catálogo | Solo avanzan las marcas de comprobación y éxito |
+| Misma versión, catálogo modificado | `same_version_changed`, se conserva el catálogo anterior |
+| Recargar `/road-to` y dejarlo abierto cinco minutos | Se usa el catálogo persistido; se conservan el estado y la posición de desplazamiento durante la actualización |
 
-Local commands from repository root:
+Comandos locales desde la raíz del repositorio:
 
 ```sh
 pnpm test:streams
@@ -207,27 +272,33 @@ git diff --check
 deno check --config supabase/functions/deno.json supabase/functions/timezone-sync/index.ts
 ```
 
-`test:timezones` runs offline Node/tsx tests of the real parser, bounded gzip/tar
-pipeline, handler dependency seam, loader fallbacks and fractional New Year arrivals.
-Fixtures are synthetic. The Deno entrypoint is narrowly excluded from Next TypeScript;
-shared pure modules are still checked. Next typechecking does not validate that
-entrypoint or prove Supabase can bundle/deploy it. Deploy from this full checkout:
-the worker's baseline JSON import refers to the existing root `data/timezones.json`.
+`test:timezones` ejecuta pruebas sin conexión con Node/tsx del analizador real,
+la cadena acotada de gzip/tar, el punto de integración de dependencias del manejador,
+las alternativas del cargador y las llegadas de Año Nuevo con desfases fraccionarios.
+Los datos de prueba son sintéticos. Solo el punto de entrada de Deno está excluido
+de la comprobación TypeScript de Next; los módulos puros compartidos siguen
+comprobándose. La comprobación de tipos de Next no valida ese punto de entrada
+ni demuestra que Supabase pueda empaquetarlo o desplegarlo. Despliegue desde esta
+copia completa del repositorio: la importación del JSON base del proceso hace
+referencia al `data/timezones.json` existente en la raíz.
 
-### Local rollback / review boundaries
+### Reversión local y límites de revisión
 
-No staging or commits are made. Review as: (1) IANA/parser + SQL publication + tests,
-(2) loader + relay refresh + tests, (3) manual operational setup. To remove local
-automation, remove the new function/migration/manual SQL/tests/docs and restore the
-relay loader/refresh integration; retain unrelated stream features. Do not reverse an
-applied database migration without a backup and separate authorization. The manual
-Cron kill switch above is the safe deployed pause; the board keeps its last-good data.
+No se añaden cambios al área de preparación ni se crean commits. Revise por partes:
+(1) IANA/analizador + publicación SQL + pruebas, (2) cargador + actualización del
+recorrido + pruebas, (3) configuración operativa manual. Para retirar la automatización
+local, elimine la nueva función, migración, SQL manual, pruebas y documentación,
+y restaure la integración del cargador y la actualización del recorrido; conserve
+las funciones de transmisiones no relacionadas. No revierta una migración de base
+de datos aplicada sin una copia de seguridad y una autorización separada. El mecanismo
+manual anterior para detener Cron es la forma segura de pausar el despliegue;
+el tablero conserva sus últimos datos válidos.
 
-## Sources
+## Fuentes
 
-- [IANA download format, release versioning and runtime distribution](https://data.iana.org/time-zones/tz-link.html#download)
-- [IANA zone.tab](https://data.iana.org/time-zones/tzdb/zone.tab), [iso3166.tab](https://data.iana.org/time-zones/tzdb/iso3166.tab), [backward](https://data.iana.org/time-zones/tzdb/backward) — format research only; worker reads all from one archive
-- [Supabase scheduled functions](https://supabase.com/docs/guides/functions/schedule-functions)
-- [Supabase function authentication](https://supabase.com/docs/guides/functions/auth-headers)
+- [Formato de descarga, versiones de publicaciones y distribución a entornos de ejecución de IANA](https://data.iana.org/time-zones/tz-link.html#download)
+- [zone.tab de IANA](https://data.iana.org/time-zones/tzdb/zone.tab), [iso3166.tab](https://data.iana.org/time-zones/tzdb/iso3166.tab), [backward](https://data.iana.org/time-zones/tzdb/backward) — solo investigación del formato; el proceso lee todo de un único archivo
+- [Funciones programadas de Supabase](https://supabase.com/docs/guides/functions/schedule-functions)
+- [Autenticación de funciones de Supabase](https://supabase.com/docs/guides/functions/auth-headers)
 - [Supabase Cron](https://supabase.com/docs/guides/cron/quickstart), [pg_net](https://supabase.com/docs/guides/database/extensions/pg_net), [Vault](https://supabase.com/docs/guides/database/vault)
-- Installed Next.js 16.3.2 `fetch` and `use-router` API guides under `node_modules/next/dist/docs/01-app/03-api-reference/04-functions/`
+- Guías instaladas de las API `fetch` y `use-router` de Next.js 16.3.2 en `node_modules/next/dist/docs/01-app/03-api-reference/04-functions/`

@@ -1,10 +1,10 @@
--- MANUAL ACTIVATION ONLY. Run as owner AFTER migration, deployment and first sync.
--- First enable pg_cron and pg_net under Database > Extensions, and confirm Vault
--- is available. Create these UNIQUE Vault names through the dashboard:
--- timezone_project_url: your project HTTPS URL, without a trailing slash
--- timezone_publishable_key: your public sb_publishable_ key (gateway routing)
--- timezone_sync_secret: the exact private TIMEZONE_SYNC_SECRET in Edge Secrets
--- No actual secret, URL, or project identifier belongs in this file.
+-- SOLO ACTIVACIÓN MANUAL. Ejecute como propietario DESPUÉS de la migración, el despliegue y la primera sincronización.
+-- Primero habilite pg_cron y pg_net en Database > Extensions y confirme que Vault
+-- esté disponible. Cree estos nombres ÚNICOS de Vault desde el panel:
+-- timezone_project_url: la URL HTTPS de su proyecto, sin barra final
+-- timezone_publishable_key: su clave pública sb_publishable_ (enrutamiento de la puerta de enlace)
+-- timezone_sync_secret: el valor privado exacto de TIMEZONE_SYNC_SECRET en Edge Secrets
+-- No incluya ningún secreto, URL ni identificador real de proyecto en este archivo.
 begin;
 do $$
 begin
@@ -23,7 +23,7 @@ begin
 end;
 $$;
 
--- Rerunning replaces this named job only; it cannot accumulate duplicate schedules.
+-- Volver a ejecutarlo reemplaza solo la tarea con este nombre; no puede acumular programaciones duplicadas.
 select cron.unschedule(jobid) from cron.job where jobname = 'timezone-iana-daily';
 select cron.schedule('timezone-iana-daily', '15 3 * * *', $$
   select net.http_post(
