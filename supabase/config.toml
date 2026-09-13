@@ -1,0 +1,4 @@
+# The gateway JWT check is disabled ONLY because the handler verifies a dedicated
+# 32+ character scheduled secret before any database call. This is not public sync.
+[functions.timezone-sync]
+verify_jwt = false

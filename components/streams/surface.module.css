@@ -1,0 +1,106 @@
+/* New Operate surfaces inherit the relay's semantic palette, without global changes.
+   The player leads /watch; form labels and the running order lead /admin. */
+.surface {
+  width: min(100% - 3rem, 76rem);
+  margin-inline: auto;
+  padding-bottom: 4rem;
+  color: var(--foreground);
+  background: var(--background);
+  --stream-highlight: var(--color-emerald-500, oklch(69.6% 0.17 162.48));
+}
+.surface :focus-visible { outline: 2px solid var(--foreground); outline-offset: 4px; }
+.surface a { text-underline-offset: 4px; }
+.surface a:hover { text-decoration: underline; }
+.surface input, .surface select { caret-color: var(--foreground); }
+.surface ::selection { color: var(--background); background: var(--foreground); }
+.nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1.5rem;
+  min-height: 5.5rem;
+  border-bottom: 1px solid var(--border);
+}
+.nav a { display: inline-flex; align-items: center; min-height: 2.75rem; }
+.navGroup, .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem 1.25rem; }
+.intro { padding-block: 2.5rem 2rem; }
+.intro h1 { font-family: var(--font-display), sans-serif; font-size: 3.5rem; font-weight: 800; line-height: 1.05; }
+.intro p { margin-top: 0.75rem; max-width: 65ch; color: var(--muted-foreground); line-height: 1.7; }
+.surface h2 { font-size: 1.25rem; font-weight: 650; line-height: 1.4; }
+.surface h3 { font-size: 1rem; font-weight: 650; }
+.muted { color: var(--muted-foreground); line-height: 1.65; }
+.room { display: grid; grid-template-columns: minmax(0, 1fr) 18rem; gap: 2rem; align-items: start; }
+.playerColumn { min-width: 0; }
+.player {
+  display: grid;
+  place-items: center;
+  min-height: 300px;
+  aspect-ratio: 16 / 9;
+  margin-top: 1rem;
+  background: var(--muted);
+  border: 1px solid var(--border);
+}
+.player iframe { display: block; width: 100%; height: 100%; min-height: 300px; border: 0; }
+.playerMessage { max-width: 42ch; padding: 1.5rem; text-align: center; }
+.playerMessage p { margin-bottom: 1rem; line-height: 1.65; }
+.button {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 2.75rem;
+  padding: 0.625rem 1rem;
+  border: 1px solid var(--border);
+  background: var(--background);
+  color: var(--foreground);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.button:hover:not(:disabled) { background: var(--muted); }
+.button:active:not(:disabled) { border-color: var(--foreground); }
+.button:disabled { opacity: 0.55; cursor: not-allowed; }
+.primary { border-color: var(--stream-highlight); box-shadow: inset 0 -2px var(--stream-highlight); }
+.notice { margin-block: 1rem; padding: 1rem; border: 1px solid var(--border); line-height: 1.65; }
+.options { padding: 0; margin-top: 1rem; list-style: none; }
+.options li { border-top: 1px solid var(--border); }
+.choice { width: 100%; border: 0; justify-content: flex-start; text-align: left; padding: 1rem 0.75rem; }
+.choice[aria-pressed="true"] { background: var(--muted); box-shadow: inset 0 -2px var(--stream-highlight); }
+.choice span { display: block; overflow-wrap: anywhere; }
+.provider { margin-top: 0.25rem; font-size: 0.875rem; color: var(--muted-foreground); }
+.section { border-top: 1px solid var(--border); margin-top: 3rem; padding-top: 1.5rem; }
+.sectionHeading { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
+.schedule { padding: 0; list-style: none; }
+.schedule > li { padding-block: 1.25rem; border-bottom: 1px solid var(--border); }
+.row { display: grid; grid-template-columns: 15rem minmax(0, 1fr) auto; gap: 1.5rem; align-items: start; }
+.time { font-variant-numeric: tabular-nums; line-height: 1.6; }
+.streamLinks { display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem; margin-top: 0.5rem; }
+.streamLinks a { display: inline-flex; align-items: center; min-height: 2.75rem; text-decoration: underline; overflow-wrap: anywhere; }
+.editor { max-width: 48rem; }
+.form { display: grid; gap: 1.5rem; margin-top: 1.5rem; }
+.form fieldset { min-width: 0; }
+.form fieldset:disabled { opacity: 0.65; }
+.field { display: grid; gap: 0.5rem; min-width: 0; }
+.field label, .form legend { font-weight: 600; }
+.field input, .field select {
+  width: 100%; min-width: 0; min-height: 2.75rem; padding: 0.625rem 0.75rem;
+  border: 1px solid var(--border); background: var(--background); color: var(--foreground); font: inherit;
+}
+:global(.dark) .field input, :global(.dark) .field select { color-scheme: dark; }
+.fields { display: grid; gap: 1.25rem; }
+.optionEditor { display: grid; gap: 1rem; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+.optionGrid { display: grid; grid-template-columns: 9rem minmax(0, 1fr); gap: 1rem; }
+.check { display: flex; align-items: center; gap: 0.75rem; min-height: 2.75rem; line-height: 1.5; }
+.check input { width: 1.125rem; height: 1.125rem; accent-color: var(--foreground); }
+.delete { margin-top: 1rem; }
+.delete summary { display: inline-flex; align-items: center; min-height: 2.75rem; cursor: pointer; text-decoration: underline; text-underline-offset: 4px; }
+.delete form { margin-block: 0.5rem 1rem; display: grid; justify-items: start; gap: 0.75rem; }
+.loading { min-height: 20rem; background: var(--muted); padding: 2rem; }
+@media (max-width: 64rem) { .room { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 40rem) {
+  .surface { width: calc(100% - 2rem); }
+  .intro h1 { font-size: 2.75rem; }
+  .row, .optionGrid { grid-template-columns: minmax(0, 1fr); gap: 0.75rem; }
+  .player { aspect-ratio: auto; }
+  .intro { padding-top: 2rem; }
+}
