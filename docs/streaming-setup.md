@@ -17,6 +17,12 @@ credenciales ni una programación de ejemplo.
    No vuelva a ejecutarla sobre tablas existentes ni ignore un error. Si existe alguna
    de las tablas, concilie primero el historial y las definiciones de las migraciones;
    no elimine ni vuelva a crear los datos.
+   Después, ejecute una vez
+   [`202610010001_stream_option_places.sql`](../supabase/migrations/202610010001_stream_option_places.sql).
+   Solo reemplaza la función `valid_stream_options` para aceptar el lugar opcional
+   (`zone`, zona IANA) y el proveedor `youtube_channel`; todas las filas existentes
+   siguen siendo válidas. Mientras no se aplique, guardar una opción con lugar o con
+   canal de YouTube falla con “Slot not saved”.
 3. En **Authentication → Providers → Email**, habilite el inicio de sesión con correo
    electrónico y contraseña. En la configuración de Auth,
    **desactive “Allow new users to sign up”**. Mantenga esa opción desactivada;
@@ -260,3 +266,20 @@ y del navegador están pendientes; las comprobaciones unitarias no los sustituye
 - [Parámetros del reproductor de YouTube](https://developers.google.com/youtube/player_parameters)
 - Guías instaladas de Next.js 16.3.2: `node_modules/next/dist/docs/01-app/` (Proxy,
   Server Actions y mutaciones, y cookies asíncronas).
+
+## Streams por cruce del relay
+
+- Cada opción puede indicar el **lugar que celebra** (zona IANA, por ejemplo
+  `Australia/Sydney`). El relay agrupa las opciones publicadas por el desfase que
+  ese lugar tiene en su medianoche de Año Nuevo y las muestra en ese cruce, con un
+  enlace a `/watch?slot=…&stream=…`.
+- Solo se consideran franjas publicadas que empiezan entre el 30 de diciembre a las
+  12:00 UTC y el 2 de enero a las 00:00 UTC de la edición actual
+  (`editionStreamWindow()` en `lib/streams/relay-link.ts`).
+- El enlace profundo selecciona el stream cuando empieza su hora; el reproductor
+  sigue cargándose solo con un clic.
+- **YouTube channel (live)** reproduce lo que el canal tenga en vivo
+  (`embed/live_stream?channel=UC…`). Sirve cuando el ID del video se conoce recién
+  el mismo día. Si el canal no está en vivo, el mensaje lo muestra YouTube.
+- “Reuse a saved stream” lista las opciones distintas de las últimas 200 franjas;
+  no existe una tabla de canales aparte.

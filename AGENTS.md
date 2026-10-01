@@ -42,6 +42,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - `resolveRolloverArrival()` recomputes offsets with `Intl` at the target New Year, then refines the arrival instant. Do not use the JSON's snapshot `gmtOffset` or the viewer's current offset: DST can differ.
 - `getRelayBands()` groups by offset minutes and sorts descending (earliest midnight first); places sort by city. Preserve half/quarter-hour offsets and derive counts from `bands.length`, never a fixed 24.
 - Unsupported IANA zone names are skipped by `getRelayBands()`; runtime `Intl` timezone support can change coverage. Viewer detection failures omit the marker rather than invent an offset.
+- Stream options may carry an optional IANA `zone` (the place celebrating). `/road-to` loads published slots in `editionStreamWindow(year)` via `relaySchedule()` (bounded, failure → no stream links) and `crossingStreams()` in `lib/streams/relay-link.ts` groups them by the zone's offset at the target New Year, matching `RelayBand.offsetMinutes`. Links go to `/watch?slot=&stream=`; the room selects that option when its hour is active and never auto-loads a player.
+- Providers are `twitch`, `youtube` (one video) and `youtube_channel` (the channel's current live, `UC…` ID). Option validation lives in both `lib/streams/domain.ts` and the SQL `valid_stream_options` (latest: `202610010001_stream_option_places.sql`); change them together. Client bundles use `lib/zones.ts` for zone names, not `data/relay.ts`.
 - “You are here” matches the viewer's offset at the target crossing, not a specific city or country. Flags use `/flags/4x3/<lowercase countryCode>.svg`; preserve that mapping when changing data/assets.
 
 ## UI and product boundaries

@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { createAuthClient } from "@/lib/supabase/server";
 import { adminAccess } from "@/lib/streams/server";
 import { runAdminLogin } from "@/lib/streams/admin-login";
-import { HOUR_MS, parseStreamSource, UUID, validateOptions, validateWindow, type StreamOption } from "@/lib/streams/domain";
+import { HOUR_MS, parseStreamSource, parseZone, PROVIDERS, UUID, validateOptions, validateWindow, type StreamOption } from "@/lib/streams/domain";
 import { validateLocalInstant } from "@/lib/streams/time";
 
 export type ActionResult = { ok: boolean; message: string };
@@ -64,9 +64,12 @@ export async function saveSlot(form: FormData): Promise<ActionResult> {
     if (!Number.isInteger(count) || count < 1 || count > 4) throw new Error("Each slot needs 1–4 stream options.");
     const options: StreamOption[] = [];
     for (let index = 0; index < count; index++) {
-      const provider = field(form, `provider_${index}`);
-      if (provider !== "twitch" && provider !== "youtube") throw new Error("Choose Twitch or YouTube.");
-      options.push({ provider, id: parseStreamSource(provider, field(form, `source_${index}`)), label: field(form, `label_${index}`).trim() });
+      const provider = PROVIDERS.find((item) => item === field(form, `provider_${index}`));
+      if (!provider) throw new Error("Choose Twitch, a YouTube video, or a YouTube channel.");
+      const option: StreamOption = { provider, id: parseStreamSource(provider, field(form, `source_${index}`)), label: field(form, `label_${index}`).trim() };
+      const zone = parseZone(field(form, `zone_${index}`));
+      if (zone) option.zone = zone;
+      options.push(option);
     }
     payload = { title, starts_at, ends_at, options: validateOptions(options), published: field(form, "published") === "on" };
     if (id && !payload.published) {
@@ -86,6 +89,7 @@ export async function saveSlot(form: FormData): Promise<ActionResult> {
   } catch { return { ok: false, message: "Save could not be confirmed. Reload the schedule before retrying to avoid duplicates." }; }
   revalidatePath("/admin");
   revalidatePath("/watch");
+  revalidatePath("/road-to");
   return { ok: true, message: payload.published ? "Slot published. The room refreshes within 30 seconds." : "Draft saved. It is not visible in the room." };
 }
 

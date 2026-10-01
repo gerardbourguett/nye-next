@@ -2,9 +2,22 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { StreamShell } from "@/components/streams/shell";
 import { adminAccess, SLOT_FIELDS } from "@/lib/streams/server";
-import { decodeSlots, UUID, type Slot } from "@/lib/streams/domain";
+import { decodeSlots, optionKey, UUID, type Slot, type StreamOption } from "@/lib/streams/domain";
+import { cityFromZoneName } from "@/lib/zones";
+import bundledZones from "@/data/timezones.json";
 import { DeleteSlot, SignOut } from "./controls";
-import { SlotEditor } from "./slot-editor";
+import { SlotEditor, type PlaceChoice } from "./slot-editor";
+
+const PLACES: PlaceChoice[] = bundledZones.zones
+  .map((zone) => ({ zoneName: zone.zoneName, label: `${cityFromZoneName(zone.zoneName)}, ${zone.countryName}` }))
+  .sort((a, b) => a.label.localeCompare(b.label));
+
+/** Every distinct stream in the loaded slots, newest slot first: the reusable channel list. */
+function savedStreams(slots: Slot[]): StreamOption[] {
+  const seen = new Map<string, StreamOption>();
+  for (const slot of slots) for (const option of slot.options) if (!seen.has(optionKey(option))) seen.set(optionKey(option), option);
+  return [...seen.values()];
+}
 import styles from "@/components/streams/surface.module.css";
 
 export const dynamic = "force-dynamic";
@@ -39,7 +52,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
   return <StreamShell admin title="Schedule manager." description="Build the running order, choose the alternatives, and publish each hour when it is ready.">
     <div className={styles.actions}><SignOut /><Link href="/admin">Reload schedule / new slot</Link></div>
     <section className={styles.section}>
-      {failure ? <p role="status" className={styles.notice}>{failure}</p> : <SlotEditor key={selected?.id ?? "new"} slot={selected} />}
+      {failure ? <p role="status" className={styles.notice}>{failure}</p> : <SlotEditor key={selected?.id ?? "new"} slot={selected} places={PLACES} saved={savedStreams(slots)} />}
     </section>
     <section className={styles.section} aria-labelledby="stored-slots">
       <div className={styles.sectionHeading}><h2 id="stored-slots">Saved slots</h2><p className={styles.muted}>Latest 200 by start time · UTC</p></div>

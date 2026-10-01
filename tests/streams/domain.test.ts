@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { activeSlot, decodeSlots, embedUrl, HOUR_MS, optionKey, overlaps, parseStreamSource, providerUrl,
-  reconcilePlayback, selectedOption, validateOptions, validateWindow, type PlaybackState, type Slot, type StreamOption } from "../../lib/streams/domain";
+import { activeSlot, decodeSlots, embedUrl, HOUR_MS, optionKey, overlaps, parseSelection, parseStreamSource, parseZone,
+  providerName, providerUrl, reconcilePlayback, selectedOption, validateOptions, validateWindow, type PlaybackState, type Slot, type StreamOption } from "../../lib/streams/domain";
 
 const twitch: StreamOption = { provider: "twitch", id: "vanderfondi", label: "Test channel" };
 const youtube: StreamOption = { provider: "youtube", id: "M7lc1UVf-VE", label: "Test video" };
@@ -173,4 +173,43 @@ test("schedule decoder fails closed on malformed database or network data", () =
   assert.deepEqual(decodeSlots([slot]), [slot]);
   for (const value of [null, {}, [null], [{ ...slot, id: "bad" }], [{ ...slot, published: "true" }],
     [{ ...slot, options: [] }], [{ ...slot, ends_at: slot.starts_at }]]) assert.throws(() => decodeSlots(value));
+});
+
+const channel: StreamOption = { provider: "youtube_channel", id: "UCabcdefghijklmnopqrstuv", label: "Test channel live" };
+
+test("YouTube channel lives accept canonical channel URLs and IDs only", () => {
+  for (const source of [channel.id, `https://www.youtube.com/channel/${channel.id}`, `https://youtube.com/channel/${channel.id}/live`,
+    `https://m.youtube.com/channel/${channel.id}/streams/`, `https://www.youtube.com/embed/live_stream?channel=${channel.id}`]) {
+    assert.equal(parseStreamSource("youtube_channel", source), channel.id);
+  }
+  for (const source of ["https://youtube.com/@channel", "UCshort", `uc${channel.id.slice(2)}`, `https://youtube.com/watch?v=${youtube.id}`,
+    `https://youtube.com.evil.example/channel/${channel.id}`, `https://www.youtube.com/channel/${channel.id}/videos`,
+    `https://www.youtube.com/embed/live_stream?channel=${channel.id}&channel=${channel.id}`]) {
+    assert.throws(() => parseStreamSource("youtube_channel", source), source);
+  }
+  assert.throws(() => parseStreamSource("youtube", channel.id));
+  assert.equal(providerUrl(channel), `https://www.youtube.com/channel/${channel.id}/live`);
+  assert.equal(embedUrl(channel, "example.com"),
+    `https://www.youtube.com/embed/live_stream?channel=${channel.id}&autoplay=0&playsinline=1`);
+  assert.equal(providerName(channel.provider), "YouTube");
+});
+
+test("an optional IANA place survives validation; malformed or unknown places fail", () => {
+  const placed = { ...channel, zone: "Australia/Sydney" };
+  assert.deepEqual(validateOptions([placed, twitch]), [placed, twitch]);
+  assert.equal("zone" in validateOptions([twitch])[0], false);
+  for (const zone of ["", "UTC", "../etc/passwd", "Australia/Sydney/Extra/Deep", "A".repeat(65), 7, null]) {
+    assert.throws(() => validateOptions([{ ...twitch, zone }]), String(zone));
+  }
+  assert.equal(parseZone("  "), undefined);
+  assert.equal(parseZone(" America/Santiago "), "America/Santiago");
+  assert.throws(() => parseZone("Mars/Olympus_Mons"));
+});
+
+test("deep links only select well-formed slot and stream pairs", () => {
+  assert.deepEqual(parseSelection(slot.id, optionKey(channel)), { slotId: slot.id, key: optionKey(channel) });
+  for (const [slotId, key] of [[slot.id, "twitch:"], [slot.id, ":vanderfondi"], [slot.id, "twitter:vanderfondi"],
+    [slot.id, "youtube:short"], ["not-a-uuid", optionKey(twitch)], [[slot.id], optionKey(twitch)], [slot.id, undefined]]) {
+    assert.equal(parseSelection(slotId, key), null, String(key));
+  }
 });

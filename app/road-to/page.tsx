@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 
 import { getRelayBands } from "@/data/relay";
 import { requestEdition } from "@/lib/edition-server";
+import { relaySchedule } from "@/lib/streams/server";
+import { crossingStreams, type CrossingStreams } from "@/lib/streams/relay-link";
 import { loadRelayCatalog } from "@/lib/timezones/server";
 import { RelayBoard } from "./relay-board";
 
@@ -15,9 +17,20 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
+// The relay must render without programming: a missing or failing schedule
+// only hides the per-crossing stream links.
+async function loadCrossingStreams(year: number): Promise<CrossingStreams> {
+  try {
+    return crossingStreams(await relaySchedule(year), year);
+  } catch {
+    return {};
+  }
+}
+
 export default async function Page() {
   const year = await requestEdition();
-  const bands = getRelayBands(year, await loadRelayCatalog());
+  const [catalog, streams] = await Promise.all([loadRelayCatalog(), loadCrossingStreams(year)]);
+  const bands = getRelayBands(year, catalog);
 
-  return <RelayBoard bands={bands} year={year} />;
+  return <RelayBoard bands={bands} year={year} streams={streams} />;
 }

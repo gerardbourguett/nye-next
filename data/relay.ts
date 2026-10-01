@@ -1,4 +1,5 @@
 import raw from "./timezones.json";
+import { cityFromZoneName } from "../lib/zones";
 
 export interface TimezoneRecord {
   countryCode: string;
@@ -19,12 +20,6 @@ export type RelayBand = {
   /** ISO instant, in UTC, of this band's local midnight into the target year. */
   arrivalUtc: string;
   places: RelayPlace[];
-};
-
-// zoneName's last path segment, for the handful that don't read as a place
-// name once underscores become spaces.
-const CITY_NAME_OVERRIDES: Record<string, string> = {
-  DumontDUrville: "Dumont d'Urville",
 };
 
 /**
@@ -84,13 +79,6 @@ export function resolveRolloverArrival(
   }
 
   return { offsetMinutes, arrivalUtcMs };
-}
-
-function cityFromZoneName(zoneName: string): string {
-  const last = zoneName.split("/").at(-1) ?? zoneName;
-  return (
-    CITY_NAME_OVERRIDES[last] ?? last.replace(/_/g, " ").replace(/^St /, "St. ")
-  );
 }
 
 export function formatOffsetLabel(offsetMinutes: number): string {

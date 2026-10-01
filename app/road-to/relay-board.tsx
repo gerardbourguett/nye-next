@@ -9,11 +9,18 @@ import {
   ArrowUpRight,
   Check,
   LocateFixed,
+  Play,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { cn } from "@/lib/utils";
 import { editionTag, editionYear } from "@/lib/edition";
+import { providerName } from "@/lib/streams/domain";
+import {
+  watchHref,
+  type CrossingStream,
+  type CrossingStreams,
+} from "@/lib/streams/relay-link";
 import {
   resolveRolloverArrival,
   type RelayBand,
@@ -36,6 +43,55 @@ function distinctCountries(places: RelayPlace[]) {
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
+function formatSlotLocal(iso: string) {
+  return new Date(iso).toLocaleTimeString(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function BandStreams({
+  list,
+  now,
+}: {
+  list: CrossingStream[];
+  now: number | null;
+}) {
+  return (
+    <div className={styles.bandStreams}>
+      <h4>Streams at this crossing</h4>
+      <ul>
+        {list.map((stream) => {
+          const ended = now !== null && Date.parse(stream.endsAt) <= now;
+          return (
+            <li key={`${stream.slotId}:${stream.key}`}>
+              <Link className={styles.streamLink} href={watchHref(stream)}>
+                <Play size={14} aria-hidden="true" /> {stream.label}
+              </Link>
+              <span className={styles.streamMeta}>
+                {stream.city} · {providerName(stream.provider)}
+                {now !== null && (
+                  <>
+                    {" · "}
+                    {ended ? "Ended " : "Scheduled "}
+                    <time dateTime={stream.startsAt}>
+                      {formatSlotLocal(stream.startsAt)}
+                    </time>
+                    –
+                    <time dateTime={stream.endsAt}>
+                      {formatSlotLocal(stream.endsAt)}
+                    </time>
+                  </>
+                )}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
 function formatArrivalLocal(iso: string) {
   return new Date(iso).toLocaleString(undefined, {
     month: "short",
@@ -48,9 +104,12 @@ function formatArrivalLocal(iso: string) {
 export function RelayBoard({
   bands,
   year,
+  streams,
 }: {
   bands: RelayBand[];
   year: number;
+  /** Published programming per crossing, keyed by offset minutes. */
+  streams: CrossingStreams;
 }) {
   const router = useRouter();
   // Both stay null until mounted, so the server render and the first client
@@ -114,6 +173,7 @@ export function RelayBoard({
   );
   const complete =
     now !== null && bands.length > 0 && crossedCount === bands.length;
+  const nextStream = nextBand && streams[nextBand.offsetMinutes]?.[0];
 
   return (
     <main className={styles.board} id="relay-top">
@@ -215,6 +275,13 @@ export function RelayBoard({
                 "Timezone data is unavailable. Try reloading this page."
               )}
             </p>
+            {nextStream && (
+              <p className={styles.overviewNote}>
+                <Link className={styles.streamLink} href={watchHref(nextStream)}>
+                  <Play size={14} aria-hidden="true" /> Watch {nextStream.label}
+                </Link>
+              </p>
+            )}
           </div>
           <div className={styles.viewerOverview}>
             <h2>
@@ -270,6 +337,7 @@ export function RelayBoard({
               const countries = distinctCountries(band.places);
               const visible = band.places.slice(0, VISIBLE_PLACES);
               const rest = band.places.slice(VISIBLE_PLACES);
+              const bandStreams = streams[band.offsetMinutes];
 
               return (
                 <li
@@ -338,6 +406,7 @@ export function RelayBoard({
                         <p>{rest.map((place) => place.city).join(", ")}</p>
                       </details>
                     )}
+                    {bandStreams && <BandStreams list={bandStreams} now={now} />}
                   </div>
                   <div className={styles.arrival}>
                     {now !== null ? (
