@@ -1,5 +1,10 @@
-export type Provider = "twitch" | "youtube";
-export type StreamOption = { provider: Provider; id: string; label: string };
+import { isSupportedZone, isZoneName } from "../zones";
+
+/** `youtube` is one video; `youtube_channel` is whatever that channel has live. */
+export type Provider = "twitch" | "youtube" | "youtube_channel";
+export const PROVIDERS: readonly Provider[] = ["twitch", "youtube", "youtube_channel"];
+/** `zone` is the IANA zone being celebrated; it ties the stream to a relay crossing. */
+export type StreamOption = { provider: Provider; id: string; label: string; zone?: string };
 export type Slot = {
   id: string;
   title: string;
@@ -13,10 +18,18 @@ export const HOUR_MS = 3_600_000;
 export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const TWITCH_ID = /^[a-z0-9_]{1,25}$/;
 const YOUTUBE_ID = /^[A-Za-z0-9_-]{11}$/;
+const YOUTUBE_CHANNEL_ID = /^UC[A-Za-z0-9_-]{22}$/;
+const YOUTUBE_HOSTS = ["youtube.com", "www.youtube.com", "m.youtube.com"];
 
 export function validProviderId(provider: unknown, id: unknown): boolean {
-  return typeof id === "string" &&
-    (provider === "twitch" ? TWITCH_ID.test(id) : provider === "youtube" && YOUTUBE_ID.test(id));
+  if (typeof id !== "string") return false;
+  if (provider === "twitch") return TWITCH_ID.test(id);
+  if (provider === "youtube") return YOUTUBE_ID.test(id);
+  return provider === "youtube_channel" && YOUTUBE_CHANNEL_ID.test(id);
+}
+
+export function providerName(provider: Provider) {
+  return provider === "twitch" ? "Twitch" : "YouTube";
 }
 
 /** Accept only canonical providers, never an arbitrary player URL or HTML. */
@@ -33,10 +46,14 @@ export function parseStreamSource(provider: Provider, input: string): string {
       id = /^\/([A-Za-z0-9_]{1,25})\/?$/.exec(url.pathname)?.[1] ?? "";
     } else if (provider === "youtube" && url.hostname === "youtu.be") {
       id = /^\/([A-Za-z0-9_-]{11})\/?$/.exec(url.pathname)?.[1] ?? "";
-    } else if (provider === "youtube" && ["youtube.com", "www.youtube.com", "m.youtube.com"].includes(url.hostname)) {
+    } else if (provider === "youtube" && YOUTUBE_HOSTS.includes(url.hostname)) {
       id = url.pathname === "/watch" && url.searchParams.getAll("v").length === 1
         ? url.searchParams.get("v") ?? ""
         : /^\/(?:live|shorts|embed)\/([A-Za-z0-9_-]{11})\/?$/.exec(url.pathname)?.[1] ?? "";
+    } else if (provider === "youtube_channel" && YOUTUBE_HOSTS.includes(url.hostname)) {
+      id = url.pathname === "/embed/live_stream" && url.searchParams.getAll("channel").length === 1
+        ? url.searchParams.get("channel") ?? ""
+        : /^\/channel\/(UC[A-Za-z0-9_-]{22})(?:\/(?:live|streams|featured))?\/?$/.exec(url.pathname)?.[1] ?? "";
     } else {
       throw new Error("The URL must belong to the selected provider.");
     }
@@ -45,9 +62,21 @@ export function parseStreamSource(provider: Provider, input: string): string {
   if (!validProviderId(provider, id)) {
     throw new Error(provider === "twitch"
       ? "Enter a Twitch channel: 1–25 letters, numbers, or underscores."
-      : "Enter a YouTube video URL or its 11-character video ID, not a channel or playlist.");
+      : provider === "youtube"
+        ? "Enter a YouTube video URL or its 11-character video ID, not a channel or playlist."
+        : "Enter a YouTube channel URL with /channel/UC… or its channel ID. @handles cannot be verified; use Share channel → Copy channel ID.");
   }
   return id;
+}
+
+/** Optional place for a stream: empty means none; otherwise a zone this runtime supports. */
+export function parseZone(input: string): string | undefined {
+  const zone = input.trim();
+  if (!zone) return undefined;
+  if (!isZoneName(zone) || !isSupportedZone(zone)) {
+    throw new Error("Choose the place from the timezone list, like America/Santiago, or leave it empty.");
+  }
+  return zone;
 }
 
 export function validateOptions(value: unknown): StreamOption[] {
@@ -58,15 +87,19 @@ export function validateOptions(value: unknown): StreamOption[] {
   return value.map((item: unknown) => {
     if (!item || typeof item !== "object") throw new Error("Invalid stream option.");
     const option = item as Record<string, unknown>;
-    if (Object.keys(option).sort().join(",") !== "id,label,provider" ||
+    const keys = Object.keys(option).sort().join(",");
+    if ((keys !== "id,label,provider" && keys !== "id,label,provider,zone") ||
         !validProviderId(option.provider, option.id) || typeof option.label !== "string" ||
-        !option.label.trim() || option.label.length > 120 || option.label !== option.label.trim()) {
-      throw new Error("Each option needs a valid provider ID and a label of 1–120 characters.");
+        !option.label.trim() || option.label.length > 120 || option.label !== option.label.trim() ||
+        ("zone" in option && !isZoneName(option.zone))) {
+      throw new Error("Each option needs a valid provider ID, a label of 1–120 characters, and an optional IANA place.");
     }
     const key = `${option.provider}:${option.id}`;
     if (seen.has(key)) throw new Error("Choose different streams within a slot.");
     seen.add(key);
-    return { provider: option.provider as Provider, id: option.id as string, label: option.label };
+    const valid: StreamOption = { provider: option.provider as Provider, id: option.id as string, label: option.label };
+    if (typeof option.zone === "string") valid.zone = option.zone;
+    return valid;
   });
 }
 
@@ -88,6 +121,14 @@ export function activeSlot(slots: Slot[], now: number): Slot | undefined {
 }
 
 export function optionKey(option: StreamOption) { return `${option.provider}:${option.id}`; }
+
+/** A deep link's `?slot=&stream=` pair, or null unless both are well formed. */
+export function parseSelection(slotId: unknown, key: unknown): { slotId: string; key: string } | null {
+  if (typeof slotId !== "string" || !UUID.test(slotId) || typeof key !== "string") return null;
+  const split = key.indexOf(":");
+  const provider = key.slice(0, split);
+  return split > 0 && validProviderId(provider, key.slice(split + 1)) ? { slotId, key } : null;
+}
 
 export function selectedOption(slot: Slot | undefined, selection: { slotId: string; key: string } | null) {
   if (!slot) return undefined;
@@ -113,14 +154,18 @@ export function reconcilePlayback(state: PlaybackState, slot: Slot | undefined, 
 
 export function providerUrl(option: StreamOption) {
   if (!validProviderId(option.provider, option.id)) throw new Error("Invalid provider ID.");
-  return option.provider === "twitch"
-    ? `https://www.twitch.tv/${option.id}`
-    : `https://www.youtube.com/watch?v=${option.id}`;
+  if (option.provider === "twitch") return `https://www.twitch.tv/${option.id}`;
+  return option.provider === "youtube"
+    ? `https://www.youtube.com/watch?v=${option.id}`
+    : `https://www.youtube.com/channel/${option.id}/live`;
 }
 
 export function embedUrl(option: StreamOption, hostname: string) {
   if (!validProviderId(option.provider, option.id)) throw new Error("Invalid provider ID.");
   if (option.provider === "youtube") return `https://www.youtube.com/embed/${option.id}?autoplay=0&playsinline=1`;
+  if (option.provider === "youtube_channel") {
+    return `https://www.youtube.com/embed/live_stream?${new URLSearchParams({ channel: option.id, autoplay: "0", playsinline: "1" })}`;
+  }
   if (!/^[a-zA-Z0-9.-]+$/.test(hostname)) throw new Error("Unsupported Twitch parent hostname.");
   return `https://player.twitch.tv/?${new URLSearchParams({ channel: option.id, parent: hostname, autoplay: "false" })}`;
 }

@@ -2,21 +2,35 @@
 
 import Link from "next/link";
 import { useEffect, useId, useState, useTransition } from "react";
-import { HOUR_MS, providerUrl, type Provider, type Slot } from "@/lib/streams/domain";
+import { HOUR_MS, optionKey, providerName, providerUrl, type Provider, type Slot, type StreamOption } from "@/lib/streams/domain";
 import { localToUtc, toLocalInput } from "@/lib/streams/time";
 import { saveSlot, type ActionResult } from "./actions";
 import styles from "@/components/streams/surface.module.css";
 
-type OptionInput = { provider: Provider; source: string; label: string };
-const blankOption = (): OptionInput => ({ provider: "twitch", source: "", label: "" });
+type OptionInput = { provider: Provider; source: string; label: string; place: string };
+export type PlaceChoice = { zoneName: string; label: string };
+const blankOption = (): OptionInput => ({ provider: "twitch", source: "", label: "", place: "" });
+const toInput = (option: StreamOption): OptionInput =>
+  ({ provider: option.provider, source: providerUrl(option), label: option.label, place: option.zone ?? "" });
 
-export function SlotEditor({ slot }: { slot?: Slot }) {
+const SOURCE_COPY: Record<Provider, { label: string; note: string }> = {
+  twitch: { label: "Channel URL or name", note: "An HTTPS twitch.tv channel URL or channel name. No clips or VODs." },
+  youtube: { label: "Video URL or video ID", note: "An HTTPS YouTube watch, live, shorts, or youtu.be URL, or an 11-character video ID. No channels or playlists." },
+  youtube_channel: { label: "Channel URL or channel ID", note: "Plays whatever this channel has live, useful when the video ID is only known on the day. Use youtube.com/channel/UC… or the UC… ID; @handles are not accepted." },
+};
+
+/**
+ * `places` feeds the optional place picker that ties a stream to a relay
+ * crossing; `saved` is every distinct stream already used in a slot, so
+ * channels can be reused instead of retyped.
+ */
+export function SlotEditor({ slot, places, saved }: { slot?: Slot; places: PlaceChoice[]; saved: StreamOption[] }) {
   const prefix = useId();
   const [zone, setZone] = useState<string | null>(null);
   const [title, setTitle] = useState(slot?.title ?? "");
   const [localStart, setLocalStart] = useState("");
   const [published, setPublished] = useState(slot?.published ?? false);
-  const [options, setOptions] = useState<OptionInput[]>(slot?.options.map((option) => ({ provider: option.provider, source: providerUrl(option), label: option.label })) ?? [blankOption()]);
+  const [options, setOptions] = useState<OptionInput[]>(slot?.options.map(toInput) ?? [blankOption()]);
   const [result, setResult] = useState<ActionResult | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -47,6 +61,7 @@ export function SlotEditor({ slot }: { slot?: Slot }) {
     <div className={styles.sectionHeading}><h2 id="slot-editor-heading">{slot ? "Edit slot" : "Create an hourly slot"}</h2>
       {slot && <Link href="/admin">Cancel editing</Link>}</div>
     <p className={styles.muted}>Each slot lasts exactly one elapsed hour. Published hours cannot overlap. Option order sets the default stream first.</p>
+    <datalist id={`${prefix}-places`}>{places.map((place) => <option key={place.zoneName} value={place.zoneName}>{place.label}</option>)}</datalist>
     <form className={styles.form} onSubmit={(event) => {
       event.preventDefault();
       const form = new FormData(event.currentTarget);
@@ -85,19 +100,34 @@ export function SlotEditor({ slot }: { slot?: Slot }) {
         </div>
         {options.map((option, index) => <fieldset key={index} className={styles.optionEditor}>
           <legend>Option {index + 1}{index === 0 ? " · Default" : ""}</legend>
+          {saved.length > 0 && <div className={styles.field}><label htmlFor={`${prefix}-saved-${index}`}>Reuse a saved stream</label>
+            <select id={`${prefix}-saved-${index}`} value="" onChange={(event) => {
+              const picked = saved.find((item) => optionKey(item) === event.target.value);
+              if (picked) updateOption(index, toInput(picked));
+            }}>
+              <option value="">Choose to fill this option…</option>
+              {saved.map((item) => <option key={optionKey(item)} value={optionKey(item)}>
+                {item.label} · {providerName(item.provider)}{item.zone ? ` · ${item.zone}` : ""}
+              </option>)}
+            </select></div>}
           <div className={styles.optionGrid}>
             <div className={styles.field}><label htmlFor={`${prefix}-provider-${index}`}>Provider</label>
               <select id={`${prefix}-provider-${index}`} name={`provider_${index}`} value={option.provider} onChange={(event) => updateOption(index, { provider: event.target.value as Provider })}>
-                <option value="twitch">Twitch</option><option value="youtube">YouTube</option>
+                <option value="twitch">Twitch</option><option value="youtube">YouTube video</option>
+                <option value="youtube_channel">YouTube channel (live)</option>
               </select></div>
-            <div className={styles.field}><label htmlFor={`${prefix}-source-${index}`}>{option.provider === "twitch" ? "Channel URL or name" : "Video URL or video ID"}</label>
+            <div className={styles.field}><label htmlFor={`${prefix}-source-${index}`}>{SOURCE_COPY[option.provider].label}</label>
               <input id={`${prefix}-source-${index}`} name={`source_${index}`} value={option.source} onChange={(event) => updateOption(index, { source: event.target.value })} maxLength={500} required
                 aria-describedby={`${prefix}-source-note-${index}`} />
-              <p id={`${prefix}-source-note-${index}`} className={styles.muted}>{option.provider === "twitch" ? "An HTTPS twitch.tv channel URL or channel name. No clips or VODs." : "An HTTPS YouTube watch, live, shorts, or youtu.be URL, or an 11-character video ID. No channels or playlists."}</p>
+              <p id={`${prefix}-source-note-${index}`} className={styles.muted}>{SOURCE_COPY[option.provider].note}</p>
             </div>
           </div>
           <div className={styles.field}><label htmlFor={`${prefix}-label-${index}`}>Display label</label>
             <input id={`${prefix}-label-${index}`} name={`label_${index}`} value={option.label} onChange={(event) => updateOption(index, { label: event.target.value })} maxLength={120} required /></div>
+          <div className={styles.field}><label htmlFor={`${prefix}-place-${index}`}>Place celebrating (optional)</label>
+            <input id={`${prefix}-place-${index}`} name={`zone_${index}`} list={`${prefix}-places`} value={option.place} onChange={(event) => updateOption(index, { place: event.target.value })}
+              maxLength={64} placeholder="e.g. Australia/Sydney" autoComplete="off" spellCheck={false} aria-describedby={`${prefix}-place-note-${index}`} />
+            <p id={`${prefix}-place-note-${index}`} className={styles.muted}>The IANA timezone of the city on screen. Published streams with a place appear on that crossing in the relay. Leave empty for studio or general streams.</p></div>
           <div className={styles.actions}>
             {index > 0 && <button type="button" className={styles.button} onClick={() => setOptions((current) => {
               const reordered = [...current];

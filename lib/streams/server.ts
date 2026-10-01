@@ -4,6 +4,7 @@ import { createAuthClient } from "@/lib/supabase/server";
 import { supabaseConfig, uncachedFetch } from "@/lib/supabase/config";
 import { authorizeAdmin } from "./authorization";
 import { decodeSlots, HOUR_MS } from "./domain";
+import { editionStreamWindow } from "./relay-link";
 
 export const SLOT_FIELDS = "id,title,starts_at,ends_at,published,options";
 
@@ -20,14 +21,18 @@ export async function adminAccess() {
   return { status, client };
 }
 
-export async function publicSchedule() {
+// Never carry a visitor's admin cookies into public schedule queries.
+function publicClient() {
   const config = supabaseConfig();
   if (!config) throw new Error("Schedule unavailable.");
-  // Never carry a visitor's admin cookies into the public schedule query.
-  const client = createClient(config.url, config.key, {
+  return createClient(config.url, config.key, {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
     global: { fetch: uncachedFetch },
   });
+}
+
+export async function publicSchedule() {
+  const client = publicClient();
   const now = Date.now();
   const { data, error } = await client.from("stream_slots").select(SLOT_FIELDS).eq("published", true)
     .gt("ends_at", new Date(now - 24 * HOUR_MS).toISOString())
@@ -35,4 +40,17 @@ export async function publicSchedule() {
     .order("starts_at").limit(400);
   if (error) throw new Error("Schedule unavailable.");
   return { slots: decodeSlots(data), serverNow: Date.now() };
+}
+
+/** Published slots that can belong to the midnight wave into `year`. */
+export async function relaySchedule(year: number) {
+  const { from, to } = editionStreamWindow(year);
+  const { data, error } = await publicClient().from("stream_slots").select(SLOT_FIELDS).eq("published", true)
+    .gte("starts_at", new Date(from).toISOString())
+    .lt("starts_at", new Date(to).toISOString())
+    .order("starts_at").limit(200)
+    // Bounded like the catalog read: the relay never waits long on programming.
+    .abortSignal(AbortSignal.timeout(4_000));
+  if (error) throw new Error("Schedule unavailable.");
+  return decodeSlots(data);
 }
