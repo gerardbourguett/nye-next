@@ -31,12 +31,13 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - `/` is the client countdown in `app/page.tsx`; `/road-to` computes bands in its server `page.tsx` and passes them to client `relay-board.tsx`.
 - Home `START`/`TARGET` are viewer-local calendar dates, not UTC. Keep clock reads inside the effect and the initial countdown state `null` to preserve matching initial markup.
 - The relay likewise starts `now`/`viewer` as `null`; viewer timezone detection and localized arrival labels happen only after mount. Home ticks every second; relay status every 30 seconds.
-- Edition changes span separate anchors: home dates, labels and accessibility text; `data/relay.ts`'s `ROLLOVER_YEAR`; and root metadata in `app/layout.tsx`. Changing the relay constant alone does not update home.
-- Current routes stay fixed on 2027; home clamps at zero after midnight. Automatic next-edition rollover and hourly stream programming in `PRODUCT.md` are requirements, not implemented behavior.
+- The edition year has one source: `editionYear(now)` in `lib/edition.ts`. Edition Y lasts until 12:00 UTC on January 1 of Y (UTC−12's midnight, end of the wave), then becomes Y + 1. Never hardcode a year in routes, labels or metadata.
+- Server code reads the edition via `requestEdition()` (`lib/edition-server.ts`, which calls `connection()`), so `/` and the root `generateMetadata` render per request instead of freezing a build-time year. Child routes set plain titles; the root title template appends `#<year>Live`.
+- Home receives the request edition as `initialYear` and re-derives it on every tick: after the viewer's own midnight it shows an "It's <year> here" state until the wave ends, then counts toward the next edition. The relay asks for one `router.refresh()` when the client clock enters a new edition.
 
 ## Relay data contract
 
-- `/road-to` uses `lib/timezones/server.ts` for a bounded no-store public snapshot read, falling back to `data/timezones.json`. `getRelayBands(zones?)` stays pure/shared with bundled defaults; never import server/database modules into it. `public/data/timezones.json` remains unused.
+- `/road-to` uses `lib/timezones/server.ts` for a bounded no-store public snapshot read, falling back to `data/timezones.json`. `getRelayBands(year, zones?)` stays pure/shared with bundled defaults; the year is always explicit; never import server/database modules into it. `public/data/timezones.json` remains unused.
 - Visible boards refresh catalog props every five minutes and on visibility return; the 30-second clock remains separate. Daily IANA automation setup is manual in `docs/timezone-sync-setup.md`; catalog updates do not update runtime ICU rules.
 - `resolveRolloverArrival()` recomputes offsets with `Intl` at the target New Year, then refines the arrival instant. Do not use the JSON's snapshot `gmtOffset` or the viewer's current offset: DST can differ.
 - `getRelayBands()` groups by offset minutes and sorts descending (earliest midnight first); places sort by city. Preserve half/quarter-hour offsets and derive counts from `bands.length`, never a fixed 24.

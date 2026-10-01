@@ -20,4 +20,4 @@ without leaving the running order. It is not a new visual identity.
   lint, and type checks do not establish contrast or rendered layout compliance.
 
 Shared route-local styles: `components/streams/surface.module.css`. Existing home,
-root layout, global styles, relay data, and 2027 countdown behavior are unchanged.
+root layout, global styles, relay data, and countdown behavior are unchanged.

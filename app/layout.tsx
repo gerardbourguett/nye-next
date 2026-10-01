@@ -3,6 +3,8 @@ import { Archivo, Big_Shoulders } from "next/font/google";
 import "./globals.css";
 import { cn } from "@/lib/utils";
 import { ThemeProvider } from "@/components/theme-provider";
+import { editionTag } from "@/lib/edition";
+import { requestEdition } from "@/lib/edition-server";
 
 // Board type, city names, and all display numerals. The Google Fonts
 // catalog available to this Next.js version consolidated the old separate
@@ -22,18 +24,23 @@ const archivo = Archivo({
   variable: "--font-sans",
 });
 
-export const metadata: Metadata = {
-  title: "#2027Live",
-  description:
-    "Midnight isn't a moment, it's a 26-hour relay. Watch all 24 timezones cross into 2027 one by one and catch vanderfondi's live New Year's Eve broadcast at twitch.tv/vanderfondi.",
-  openGraph: {
-    title: "#2027Live",
-    description:
-      "Follow midnight as it crosses the planet, timezone by timezone, and catch the hour's stream lineup from vanderfondi's live New Year's Eve broadcast.",
-    siteName: "#2027Live",
-    type: "website",
-  },
-};
+// Resolved per request so titles, previews and the brand tag follow the
+// edition rollover in lib/edition.ts instead of a year frozen at build time.
+export async function generateMetadata(): Promise<Metadata> {
+  const year = await requestEdition();
+  const tag = editionTag(year);
+  return {
+    title: { default: tag, template: `%s | ${tag}` },
+    description: `Midnight isn't a moment, it's a 26-hour relay. Watch every timezone cross into ${year} one by one and catch vanderfondi's live New Year's Eve broadcast at twitch.tv/vanderfondi.`,
+    openGraph: {
+      title: tag,
+      description:
+        "Follow midnight as it crosses the planet, timezone by timezone, and catch the hour's stream lineup from vanderfondi's live New Year's Eve broadcast.",
+      siteName: tag,
+      type: "website",
+    },
+  };
+}
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (

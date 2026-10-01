@@ -38,8 +38,9 @@ state text distinguishes the next and completed crossings without colored fills.
   Existing target-year offset resolution and 30-second updates are unchanged.
 - Viewer matching uses the offset at New Year, not a city or current-season offset.
 - First, in-progress, completed, unmatched-viewer, and empty-data states have
-  truthful text. Completion stays on the fixed 2027 edition; automatic rollover
-  and hourly programming are not implemented by this redesign.
+  truthful text. Completion holds until the wave ends at 12:00 UTC on January 1,
+  then the server serves the next edition (`lib/edition.ts`). Hourly
+  programming is not part of this route.
 - The CSS module is route-local. Home, global layout, shared tokens, and relay
   data logic are outside this change.
 

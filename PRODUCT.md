@@ -28,11 +28,11 @@ Most countdowns count to one midnight: the viewer's own. This one follows midnig
 
 ## Capabilities and Constraints
 
-- Local-time countdown to the viewer's own midnight (the current implementation anchors to January 1, 2027, local time).
+- Local-time countdown to the viewer's own midnight (the current edition, resolved by `lib/edition.ts`; after the last timezone crosses at 12:00 UTC on January 1 it rolls to the following year).
 - Rolling midnight wave across timezones: which regions have already entered the new year, which are next.
 - Curated celebrations anchored to that wave (named city events at their local midnight).
 - Per-hour stream slots: each hour of the broadcast holds **one to four** stream options. The page must be a template that accepts this full range, not a layout tuned to a single count.
-- **Year rollover:** when the target midnight passes, the surface does not end. It re-identifies as `#2028Live` and begins counting toward the following January 1. Each edition carries its own accent color; orange is bound to 2028.
+- **Year rollover (implemented without per-edition accent colors):** when the target midnight passes, the surface does not end. It re-identifies as `#2028Live` and begins counting toward the following January 1. Each edition carries its own accent color; orange is bound to 2028.
 - Confirmed viewing room: Twitch and YouTube embeds, one selected player at a time, no autoplay, and direct provider links as fallback.
 - Confirmed programming management: a private admin panel, Supabase authentication with explicit admin membership, and PostgreSQL persistence for hourly slots with one to four options. Visitors do not need accounts.
 - Explicitly undecided: whether the pre-broadcast promotional role is in scope; the accent color for the 2027 edition. The viewing room and admin panel preserve the incumbent semantic theme palette and emerald accents, without a global redesign.

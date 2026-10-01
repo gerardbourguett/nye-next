@@ -10,12 +10,12 @@ import {
   Check,
   LocateFixed,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { cn } from "@/lib/utils";
+import { editionTag, editionYear } from "@/lib/edition";
 import {
   resolveRolloverArrival,
-  ROLLOVER_YEAR,
   type RelayBand,
   type RelayPlace,
 } from "@/data/relay";
@@ -45,12 +45,19 @@ function formatArrivalLocal(iso: string) {
   });
 }
 
-export function RelayBoard({ bands }: { bands: RelayBand[] }) {
+export function RelayBoard({
+  bands,
+  year,
+}: {
+  bands: RelayBand[];
+  year: number;
+}) {
   const router = useRouter();
   // Both stay null until mounted, so the server render and the first client
   // render agree — the viewer's own zone and "now" only exist in the browser.
   const [now, setNow] = useState<number | null>(null);
   const [viewer, setViewer] = useState<Viewer>(null);
+  const requestedEdition = useRef(year);
 
   useEffect(() => {
     const refresh = () => {
@@ -68,19 +75,33 @@ export function RelayBoard({ bands }: { bands: RelayBand[] }) {
     const detectViewer = () => {
       try {
         const zoneName = Intl.DateTimeFormat().resolvedOptions().timeZone;
-        const { offsetMinutes } = resolveRolloverArrival(zoneName);
+        const { offsetMinutes } = resolveRolloverArrival(zoneName, year);
         setViewer({ offsetMinutes });
       } catch {
         setViewer(null);
       }
     };
     detectViewer();
+  }, [year]);
 
+  useEffect(() => {
     const tick = () => setNow(Date.now());
     tick();
     const interval = setInterval(tick, TICK_MS);
     return () => clearInterval(interval);
   }, []);
+
+  // Once the wave is over the server serves the next edition; fetch it
+  // promptly instead of waiting for the five-minute catalog refresh. One
+  // request per edition, so a skewed device clock cannot loop refreshes.
+  useEffect(() => {
+    if (now === null) return;
+    const current = editionYear(now);
+    if (current !== year && current !== requestedEdition.current) {
+      requestedEdition.current = current;
+      router.refresh();
+    }
+  }, [now, year, router]);
 
   const crossedCount =
     now === null
@@ -103,7 +124,7 @@ export function RelayBoard({ bands }: { bands: RelayBand[] }) {
         <div className={styles.container}>
           <nav className={styles.navigation} aria-label="Relay navigation">
             <Link href="/" className={styles.brand}>
-              <ArrowLeft size={18} aria-hidden="true" /> #{ROLLOVER_YEAR}Live
+              <ArrowLeft size={18} aria-hidden="true" /> {editionTag(year)}
             </Link>
             <a
               href="/watch"
@@ -118,19 +139,19 @@ export function RelayBoard({ bands }: { bands: RelayBand[] }) {
             </h1>
             <p>
               One planet. Many midnights.<br />
-              Follow the places crossing into {ROLLOVER_YEAR}, from the first
+              Follow the places crossing into {year}, from the first
               timezone to the last.
             </p>
           </div>
           <div className={styles.progressHeading}>
-            <span>Already in {ROLLOVER_YEAR}</span>
+            <span>Already in {year}</span>
             <span className={styles.progressCount}>
               {now === null ? "—" : crossedCount} / {bands.length} crossings
             </span>
           </div>
           <div
             role="progressbar"
-            aria-label={`Bands already past midnight into ${ROLLOVER_YEAR}`}
+            aria-label={`Bands already past midnight into ${year}`}
             aria-valuemin={0}
             aria-valuemax={bands.length || 1}
             aria-valuenow={now === null ? undefined : crossedCount}
@@ -164,7 +185,7 @@ export function RelayBoard({ bands }: { bands: RelayBand[] }) {
             <div className={styles.nextContent}>
               <p className={styles.nextPlace}>
                 {complete
-                  ? `Every listed timezone is in ${ROLLOVER_YEAR}.`
+                  ? `Every listed timezone is in ${year}.`
                   : (nextBand ?? bands[0])?.places[0]?.city ??
                     "No crossings available"}
               </p>
