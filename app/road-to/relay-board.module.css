@@ -459,6 +459,15 @@
   text-decoration-color: currentColor;
 }
 
+.streamEnded {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  color: var(--relay-muted);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
 .streamMeta {
   color: var(--relay-muted);
   font-size: 0.75rem;

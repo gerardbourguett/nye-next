@@ -83,11 +83,13 @@ export function ViewingRoom({ requested: initialRequest = null }: { requested?: 
   const canEmbed = option && browser && (option.provider !== "twitch" ? width >= 200 :
     width >= 400 && browser.secure && /^[a-zA-Z0-9.-]+$/.test(browser.hostname));
   // A deep link waits for its hour, then becomes the selection (never a load:
-  // players still start only on an explicit click). Unknown or past links drop.
+  // players still start only on an explicit click). A slot missing from the
+  // snapshot may still be beyond its 14-day window, so only a slot that is
+  // present and ended, or lost the option, drops the request.
   const requestedSlot = requested && snapshot ? snapshot.slots.find((item) => item.id === requested.slotId) : undefined;
   const requestedOption = requestedSlot?.options.find((item) => optionKey(item) === requested?.key);
-  if (requested && snapshot && now !== null && !stale) {
-    if (!requestedSlot || !requestedOption || Date.parse(requestedSlot.ends_at) <= now) setRequested(null);
+  if (requested && requestedSlot && now !== null && !stale) {
+    if (!requestedOption || Date.parse(requestedSlot.ends_at) <= now) setRequested(null);
     else if (slot?.id === requested.slotId) {
       setRequested(null);
       setPlayback({ selection: requested, loadedPlayer: null });

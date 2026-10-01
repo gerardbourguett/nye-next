@@ -65,9 +65,13 @@ function BandStreams({
           const ended = now !== null && Date.parse(stream.endsAt) <= now;
           return (
             <li key={`${stream.slotId}:${stream.key}`}>
-              <Link className={styles.streamLink} href={watchHref(stream)}>
-                <Play size={14} aria-hidden="true" /> {stream.label}
-              </Link>
+              {ended ? (
+                <span className={styles.streamEnded}>{stream.label}</span>
+              ) : (
+                <Link className={styles.streamLink} href={watchHref(stream)}>
+                  <Play size={14} aria-hidden="true" /> {stream.label}
+                </Link>
+              )}
               <span className={styles.streamMeta}>
                 {stream.city} · {providerName(stream.provider)}
                 {now !== null && (
@@ -173,7 +177,13 @@ export function RelayBoard({
   );
   const complete =
     now !== null && bands.length > 0 && crossedCount === bands.length;
-  const nextStream = nextBand && streams[nextBand.offsetMinutes]?.[0];
+  // Only a stream that has not ended: a past slot's link would be discarded.
+  const nextStream =
+    nextBand && now !== null
+      ? streams[nextBand.offsetMinutes]?.find(
+          (stream) => Date.parse(stream.endsAt) > now,
+        )
+      : undefined;
 
   return (
     <main className={styles.board} id="relay-top">
