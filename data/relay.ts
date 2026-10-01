@@ -16,13 +16,10 @@ export type RelayPlace = {
 export type RelayBand = {
   offsetMinutes: number;
   offsetLabel: string;
-  /** ISO instant, in UTC, of this band's local midnight into ROLLOVER_YEAR. */
+  /** ISO instant, in UTC, of this band's local midnight into the target year. */
   arrivalUtc: string;
   places: RelayPlace[];
 };
-
-/** The New Year this board counts down to. Matches app/page.tsx's TARGET. */
-export const ROLLOVER_YEAR = 2027;
 
 // zoneName's last path segment, for the handful that don't read as a place
 // name once underscores become spaces.
@@ -68,13 +65,13 @@ function offsetMinutesAt(zoneName: string, instant: Date): number {
 
 /**
  * The offset a zone observes at the instant its own clock reaches local
- * midnight on ROLLOVER_YEAR-01-01. Resolved by one round of fixed-point
+ * midnight on January 1 of `year`. Resolved by one round of fixed-point
  * refinement so a zone that shifts DST across New Year's Eve still lands on
  * the offset actually in effect at the crossing, not a guess from months out.
  */
 export function resolveRolloverArrival(
   zoneName: string,
-  year: number = ROLLOVER_YEAR,
+  year: number,
 ): { offsetMinutes: number; arrivalUtcMs: number } {
   const guessUtcMs = Date.UTC(year, 0, 1, 0, 0, 0);
   let offsetMinutes = offsetMinutesAt(zoneName, new Date(guessUtcMs));
@@ -106,18 +103,21 @@ export function formatOffsetLabel(offsetMinutes: number): string {
 
 /**
  * Every place in timezones.json, grouped by the offset it actually observes
- * at the ROLLOVER_YEAR crossing and ordered by arrival — first place on
+ * at the crossing into `year` and ordered by arrival — first place on
  * Earth to reach midnight first. Buckets are derived from the data, never
  * hardcoded to 24: DST and the half/quarter-hour zones (Kathmandu +05:45,
  * Eucla +08:45, Chatham +12:45 in its own DST) mean the real count varies.
  */
-export function getRelayBands(zones: readonly TimezoneRecord[] = raw.zones): RelayBand[] {
+export function getRelayBands(
+  year: number,
+  zones: readonly TimezoneRecord[] = raw.zones,
+): RelayBand[] {
   const byOffset = new Map<number, { arrivalUtcMs: number; places: RelayPlace[] }>();
 
   for (const zone of zones) {
     let arrival: { offsetMinutes: number; arrivalUtcMs: number };
     try {
-      arrival = resolveRolloverArrival(zone.zoneName);
+      arrival = resolveRolloverArrival(zone.zoneName, year);
     } catch {
       // Intl couldn't resolve this IANA name in this runtime — skip rather
       // than show a fabricated offset for it.

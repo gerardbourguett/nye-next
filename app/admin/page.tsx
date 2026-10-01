@@ -8,7 +8,7 @@ import { SlotEditor } from "./slot-editor";
 import styles from "@/components/streams/surface.module.css";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Schedule manager | #2027Live", robots: { index: false, follow: false } };
+export const metadata = { title: "Schedule manager", robots: { index: false, follow: false } };
 
 export default async function AdminPage({ searchParams }: { searchParams: Promise<{ edit?: string }> }) {
   const { client, status } = await adminAccess();

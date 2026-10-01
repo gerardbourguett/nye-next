@@ -5,7 +5,7 @@ import { LoginForm } from "./login-form";
 import styles from "@/components/streams/surface.module.css";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Admin sign in | #2027Live", robots: { index: false, follow: false } };
+export const metadata = { title: "Admin sign in", robots: { index: false, follow: false } };
 
 export default async function LoginPage() {
   const { status } = await adminAccess();

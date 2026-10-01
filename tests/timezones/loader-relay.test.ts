@@ -50,18 +50,18 @@ test("whole-snapshot validation rejects duplicate zones, lost coverage, unsafe l
 
 test("fractional offsets and New Year DST use Intl at the target, never stored offsets", () => {
   for (const [zoneName, offset] of [["Asia/Kathmandu", 345], ["Australia/Eucla", 525], ["Pacific/Chatham", 825], ["Australia/Adelaide", 630], ["America/St_Johns", -210]] as const) {
-    const arrival = resolveRolloverArrival(zoneName);
+    const arrival = resolveRolloverArrival(zoneName, 2027);
     assert.equal(arrival.offsetMinutes, offset);
     assert.equal(arrival.arrivalUtcMs, Date.UTC(2027, 0, 1) - offset * 60_000);
     const zone = { zoneName, countryCode: "NZ", countryName: "Synthetic", gmtOffset: 999999, timestamp: 0 };
-    assert.equal(getRelayBands([zone])[0].offsetMinutes, offset);
+    assert.equal(getRelayBands(2027, [zone])[0].offsetMinutes, offset);
   }
 });
 
 test("default catalog remains compatible; supplied catalog is used, sorted and unsupported names skipped", () => {
-  assert.deepEqual(getRelayBands(), getRelayBands(bundled.zones));
+  assert.deepEqual(getRelayBands(2027), getRelayBands(2027, bundled.zones));
   const zones = ["Asia/Kathmandu", "Australia/Eucla", "Unsupported/Zone"].map((zoneName) => ({ zoneName, countryCode: "NP", countryName: "Synthetic" }));
-  assert.deepEqual(getRelayBands(zones).map((band) => band.offsetMinutes), [525, 345]);
+  assert.deepEqual(getRelayBands(2027, zones).map((band) => band.offsetMinutes), [525, 345]);
   const place = bundled.zones.find((z) => z.zoneName === "Africa/El_Aaiun");
   assert.equal(place?.countryCode, "EH", "Explicit IANA-backed baseline correction");
 });
