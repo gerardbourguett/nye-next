@@ -135,6 +135,8 @@ export function ChatPanel({ option, info, browser, dark }: {
     return () => observer.disconnect();
   }, []);
   const active = sources.find((item) => item.key === chosen) ?? sources[0];
+  // Consent covers one exact chat: a channel's next live video needs a new click.
+  const consent = `${active.key}:${active.videoId ?? ""}:${dark}`;
   // Twitch's embedded chat needs HTTPS and at least 350 px; narrower panels pop it out.
   const canEmbed = browser && (active.videoId || (browser.secure && width >= TWITCH_CHAT_MIN_WIDTH));
   const url = browser && canEmbed
@@ -153,7 +155,7 @@ export function ChatPanel({ option, info, browser, dark }: {
       </div>}
     </div>
     <div className={styles.chatBody} ref={body}>
-      {url && loaded === `${active.key}:${dark}`
+      {url && loaded === consent
         ? <iframe key={url} src={url} title={`${active.label} chat`} referrerPolicy="strict-origin-when-cross-origin" />
         : <div className={styles.playerMessage}>
           <p>{url ? `Load ${active.label}'s chat. Loading connects your browser to ${active.channel ? "Twitch" : "YouTube"}.`
@@ -161,7 +163,7 @@ export function ChatPanel({ option, info, browser, dark }: {
               : "This space is narrower than Twitch chat needs. Open it in a new window instead."}</p>
           <div className={styles.actions} style={{ justifyContent: "center" }}>
             {url && <button type="button" className={cn(styles.button, styles.primary)}
-              onClick={() => setLoaded(`${active.key}:${dark}`)}>Load chat</button>}
+              onClick={() => setLoaded(consent)}>Load chat</button>}
             <a className={styles.button} href={popout} target="_blank" rel="noopener noreferrer">Pop out</a>
           </div>
         </div>}

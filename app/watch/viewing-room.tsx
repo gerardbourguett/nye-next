@@ -135,12 +135,16 @@ export function ViewingRoom({ requested: initialRequest = null }: { requested?: 
       try {
         const response = await fetch(`/watch/live?${new URLSearchParams({ keys: liveKeys })}`,
           { credentials: "omit", signal: AbortSignal.any([controller.signal, AbortSignal.timeout(10_000)]) });
-        if (!response.ok) return;
+        if (!response.ok) throw new Error("Live status unavailable");
         const value: unknown = await response.json();
-        if (value && typeof value === "object" && "live" in value && value.live && typeof value.live === "object") {
-          setLive(value.live as LiveMap);
+        if (!value || typeof value !== "object" || !("live" in value) || !value.live || typeof value.live !== "object") {
+          throw new Error("Invalid live status");
         }
-      } catch { /* Status is optional: the room keeps saying "scheduled". */ }
+        setLive(value.live as LiveMap);
+      } catch {
+        // Unconfirmed is not live: drop old claims so streams read "Scheduled".
+        if (!controller.signal.aborted) setLive({});
+      }
     };
     void load();
     const interval = setInterval(() => void load(), LIVE_POLL_MS);
