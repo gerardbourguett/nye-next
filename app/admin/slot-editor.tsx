@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useId, useState, useTransition } from "react";
-import { HOUR_MS, optionKey, providerName, providerUrl, type Provider, type Slot, type StreamOption } from "@/lib/streams/domain";
+import { formatDuration, MAX_SLOT_MS, MIN_SLOT_MS, optionKey, providerName, providerUrl, type Provider, type Slot, type StreamOption } from "@/lib/streams/domain";
 import { localToUtc, toLocalInput } from "@/lib/streams/time";
 import { saveSlot, type ActionResult } from "./actions";
 import styles from "@/components/streams/surface.module.css";
@@ -29,6 +29,9 @@ export function SlotEditor({ slot, places, saved }: { slot?: Slot; places: Place
   const [zone, setZone] = useState<string | null>(null);
   const [title, setTitle] = useState(slot?.title ?? "");
   const [localStart, setLocalStart] = useState("");
+  const initialMinutes = slot ? Math.round((Date.parse(slot.ends_at) - Date.parse(slot.starts_at)) / 60_000) : 60;
+  const [durationHours, setDurationHours] = useState(String(Math.floor(initialMinutes / 60)));
+  const [durationMinutes, setDurationMinutes] = useState(String(initialMinutes % 60));
   const [published, setPublished] = useState(slot?.published ?? false);
   const [options, setOptions] = useState<OptionInput[]>(slot?.options.map(toInput) ?? [blankOption()]);
   const [result, setResult] = useState<ActionResult | null>(null);
@@ -45,11 +48,13 @@ export function SlotEditor({ slot, places, saved }: { slot?: Slot; places: Place
     detectZone();
   }, [slot]);
 
+  const durationMs = (Number(durationHours) * 60 + Number(durationMinutes)) * 60_000;
+  const durationValid = Number.isInteger(durationMs / 60_000) && durationMs >= MIN_SLOT_MS && durationMs <= MAX_SLOT_MS;
   let preview = "";
-  if (localStart && zone) {
+  if (localStart && zone && durationValid) {
     try {
       const start = localToUtc(localStart, zone);
-      preview = `${start} → ${new Date(Date.parse(start) + HOUR_MS).toISOString()}`;
+      preview = `${start} → ${new Date(Date.parse(start) + durationMs).toISOString()} (${formatDuration(durationMs)})`;
     } catch { /* Validation is reported on submission; partial input stays quiet. */ }
   }
 
@@ -58,9 +63,9 @@ export function SlotEditor({ slot, places, saved }: { slot?: Slot; places: Place
   };
 
   return <section className={styles.editor} aria-labelledby="slot-editor-heading">
-    <div className={styles.sectionHeading}><h2 id="slot-editor-heading">{slot ? "Edit slot" : "Create an hourly slot"}</h2>
+    <div className={styles.sectionHeading}><h2 id="slot-editor-heading">{slot ? "Edit slot" : "Create a slot"}</h2>
       {slot && <Link href="/admin">Cancel editing</Link>}</div>
-    <p className={styles.muted}>Each slot lasts exactly one elapsed hour. Published hours cannot overlap. Option order sets the default stream first.</p>
+    <p className={styles.muted}>Slots last one hour by default and can run from 5 minutes to 7 days, for example a full-day rehearsal. Published slots cannot overlap. Option order sets the default stream first.</p>
     <datalist id={`${prefix}-places`}>{places.map((place) => <option key={place.zoneName} value={place.zoneName}>{place.label}</option>)}</datalist>
     <form className={styles.form} onSubmit={(event) => {
       event.preventDefault();
@@ -68,6 +73,7 @@ export function SlotEditor({ slot, places, saved }: { slot?: Slot; places: Place
       setResult(null);
       try {
         if (!zone || zone !== Intl.DateTimeFormat().resolvedOptions().timeZone) throw new Error("Your timezone changed or is unavailable. Reload before saving.");
+        if (!durationValid) throw new Error("Choose a duration between 5 minutes and 7 days.");
         form.set("starts_at", localToUtc(localStart, zone));
         form.set("timezone", zone);
         if (slot?.published && !published) {
@@ -82,12 +88,14 @@ export function SlotEditor({ slot, places, saved }: { slot?: Slot; places: Place
         try {
           const saved = await saveSlot(form);
           setResult(saved);
-          if (saved.ok && !slot) { setTitle(""); setLocalStart(""); setOptions([blankOption()]); setPublished(false); }
+          if (saved.ok && !slot) {
+            setTitle(""); setLocalStart(""); setDurationHours("1"); setDurationMinutes("0"); setOptions([blankOption()]); setPublished(false);
+          }
         } catch { setResult({ ok: false, message: "Save could not be confirmed. Reload the schedule before retrying to avoid duplicates." }); }
       });
     }}>
       <fieldset disabled={pending || !zone} className={styles.fields}>
-        <legend className="sr-only">Hourly slot details</legend>
+        <legend className="sr-only">Slot details</legend>
         <input type="hidden" name="id" value={slot?.id ?? ""} />
         <input type="hidden" name="count" value={options.length} />
         <div className={styles.field}><label htmlFor={`${prefix}-title`}>Slot title</label>
@@ -96,8 +104,22 @@ export function SlotEditor({ slot, places, saved }: { slot?: Slot; places: Place
           <input id={`${prefix}-start`} name="local_start" type="datetime-local" min="2000-01-01T00:00" max="2100-12-31T23:59" step={60}
             value={localStart} onChange={(event) => setLocalStart(event.target.value)} required aria-describedby={`${prefix}-time-note`} />
           <p id={`${prefix}-time-note`} className={styles.muted}>Saved in UTC. Skipped or repeated daylight-saving times are rejected, never silently shifted.</p>
-          {preview && <p className={`${styles.muted} ${styles.time}`}>UTC window: {preview}</p>}
         </div>
+        <fieldset className={styles.optionEditor}>
+          <legend>Duration</legend>
+          <div className={styles.optionGrid}>
+            <div className={styles.field}><label htmlFor={`${prefix}-hours`}>Hours</label>
+              <input id={`${prefix}-hours`} name="duration_hours" type="number" inputMode="numeric" min={0} max={168} step={1}
+                value={durationHours} onChange={(event) => setDurationHours(event.target.value)} required /></div>
+            <div className={styles.field}><label htmlFor={`${prefix}-minutes`}>Minutes</label>
+              <select id={`${prefix}-minutes`} name="duration_minutes" value={durationMinutes} onChange={(event) => setDurationMinutes(event.target.value)}>
+                {Array.from({ length: 12 }, (_, step) => String(step * 5)).concat(
+                  Number(durationMinutes) % 5 ? [durationMinutes] : []).map((value) => <option key={value} value={value}>{value}</option>)}
+              </select></div>
+          </div>
+          <p className={styles.muted}>{durationValid ? `Elapsed time: ${formatDuration(durationMs)}, regardless of clock changes.` : "Choose between 5 minutes and 7 days."}</p>
+          {preview && <p className={`${styles.muted} ${styles.time}`}>UTC window: {preview}</p>}
+        </fieldset>
         {options.map((option, index) => <fieldset key={index} className={styles.optionEditor}>
           <legend>Option {index + 1}{index === 0 ? " · Default" : ""}</legend>
           {saved.length > 0 && <div className={styles.field}><label htmlFor={`${prefix}-saved-${index}`}>Reuse a saved stream</label>

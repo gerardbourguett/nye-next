@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { activeSlot, decodeSlots, embedUrl, HOUR_MS, optionKey, overlaps, parseSelection, parseStreamSource, parseZone,
+import { activeSlot, decodeSlots, embedUrl, formatDuration, HOUR_MS, optionKey, overlaps, parseSelection, parseStreamSource, parseZone,
   providerName, providerUrl, reconcilePlayback, selectedOption, validateOptions, validateWindow, type PlaybackState, type Slot, type StreamOption } from "../../lib/streams/domain";
 
 const twitch: StreamOption = { provider: "twitch", id: "vanderfondi", label: "Test channel" };
@@ -53,11 +53,18 @@ test("1–4 unique ordered options are accepted; zero, five, duplicates, and uns
     [{ ...twitch, label: "a".repeat(121) }], [{ ...twitch, html: "<iframe>" }]]) assert.throws(() => validateOptions(options));
 });
 
-test("one elapsed hour and the supported date range are enforced", () => {
+test("slots last whole minutes from 5 minutes to 7 days within the supported range", () => {
   validateWindow(slot.starts_at, slot.ends_at);
-  for (const end of [slot.starts_at, "invalid", "2026-12-31T23:59:59.999Z", "2027-01-01T00:00:00.001Z"]) {
-    assert.throws(() => validateWindow(slot.starts_at, end));
+  validateWindow(slot.starts_at, "2026-12-31T23:05:00.000Z");
+  validateWindow(slot.starts_at, "2027-01-07T23:00:00.000Z");
+  for (const end of [slot.starts_at, "invalid", "2026-12-31T23:04:00.000Z", "2026-12-31T23:59:59.999Z",
+    "2027-01-01T00:00:00.001Z", "2027-01-07T23:01:00.000Z", "2026-12-31T22:00:00.000Z"]) {
+    assert.throws(() => validateWindow(slot.starts_at, end), end);
   }
+  assert.equal(formatDuration(3_600_000), "1 h");
+  assert.equal(formatDuration(45 * 60_000), "45 min");
+  assert.equal(formatDuration(150 * 60_000), "2 h 30 min");
+  assert.equal(formatDuration(76 * 3_600_000), "3 d 4 h");
   assert.throws(() => validateWindow("1999-01-01T00:00:00Z", "1999-01-01T01:00:00Z"));
 });
 

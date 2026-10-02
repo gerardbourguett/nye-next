@@ -7,7 +7,7 @@ export const metadata = { title: "Viewing room" };
 
 export default async function WatchPage({ searchParams }: PageProps<"/watch">) {
   const { slot, stream } = await searchParams;
-  return <StreamShell title="The viewing room." description="Choose what to watch as the night moves around the world. One player, with the hourly alternatives close at hand.">
+  return <StreamShell title="The viewing room." description="Choose what to watch as the night moves around the world. One player, with the alternatives close at hand.">
     <ViewingRoom requested={parseSelection(slot, stream)} />
   </StreamShell>;
 }

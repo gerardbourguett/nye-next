@@ -23,6 +23,12 @@ credenciales ni una programación de ejemplo.
    (`zone`, zona IANA) y el proveedor `youtube_channel`; todas las filas existentes
    siguen siendo válidas. Mientras no se aplique, guardar una opción con lugar o con
    canal de YouTube falla con “Slot not saved”.
+   Luego ejecute una vez
+   [`202610020001_flexible_slot_duration.sql`](../supabase/migrations/202610020001_flexible_slot_duration.sql).
+   Reemplaza la regla de “exactamente 1 hora” por una duración de 5 minutos a 7 días
+   en minutos exactos (útil para ensayos generales). Las franjas existentes siguen
+   siendo válidas. Mientras no se aplique, guardar una duración distinta de 1 hora
+   falla con “Slot not saved”.
 3. En **Authentication → Providers → Email**, habilite el inicio de sesión con correo
    electrónico y contraseña. En la configuración de Auth,
    **desactive “Allow new users to sign up”**. Mantenga esa opción desactivada;

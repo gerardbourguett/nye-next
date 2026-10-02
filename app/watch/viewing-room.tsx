@@ -101,12 +101,12 @@ export function ViewingRoom({ requested: initialRequest = null }: { requested?: 
   if (reconciledPlayback !== playback) setPlayback(reconciledPlayback);
   const loadedPlayer = reconciledPlayback.loadedPlayer;
   const emptyTitle = !snapshot ? error ? "The schedule is unavailable" : "Loading the schedule…" : stale
-    ? "Waiting for a fresh schedule" : upcoming.length ? "The next hour is on its way" : ended
+    ? "Waiting for a fresh schedule" : upcoming.length ? "The next slot is on its way" : ended
       ? "The published schedule has ended" : "No programming published yet";
 
   return <>
     {requested && requestedSlot && requestedOption && slot?.id !== requested.slotId && <p className={styles.notice} role="status">
-      {requestedOption.label} ({source(requestedOption)}) is scheduled for {localTime(requestedSlot.starts_at)}. It will be selected here when that hour begins.
+      {requestedOption.label} ({source(requestedOption)}) is scheduled for {localTime(requestedSlot.starts_at)}. It will be selected here when that slot begins.
     </p>}
     {error && <div className={styles.notice} role="status">
       The schedule could not be refreshed. {snapshot && !stale ? "Showing the last received schedule. " : ""}
@@ -124,7 +124,7 @@ export function ViewingRoom({ requested: initialRequest = null }: { requested?: 
               <p>{option ? canEmbed ? "Load the selected provider’s player, then press play. Loading connects your browser to that provider."
                 : option.provider === "twitch" ? "Twitch needs HTTPS and at least 400 pixels of player width. Open it directly, or use a wider HTTPS window."
                   : "Open the video directly, or use a wider window to load the player."
-                : !snapshot ? error ? "Please try again shortly. You can still visit vanderfondi on Twitch above." : "Checking published hourly slots."
+                : !snapshot ? error ? "Please try again shortly. You can still visit vanderfondi on Twitch above." : "Checking published slots."
                   : stale ? "Playback is paused here until the schedule can be checked again."
                     : upcoming.length ? `Next: ${upcoming[0].title} · ${localTime(upcoming[0].starts_at)}`
                       : "There are no upcoming published slots in the next 14 days. Return to the relay or check back later."}</p>
@@ -140,13 +140,13 @@ export function ViewingRoom({ requested: initialRequest = null }: { requested?: 
         <p className={styles.muted} style={{ marginTop: "1rem" }}>Scheduled does not mean live. Offline, ended, restricted, or unavailable video messages come from the provider. If playback fails, use the direct link.</p>
       </section>
       <aside aria-labelledby="hour-options">
-        <h2 id="hour-options">This hour’s options</h2>
+        <h2 id="hour-options">Options on now</h2>
         {slot ? <ul className={styles.options}>{slot.options.map((item) => <li key={optionKey(item)}>
           <button className={`${styles.button} ${styles.choice}`} aria-pressed={option && optionKey(option) === optionKey(item)}
             onClick={() => setPlayback({ selection: { slotId: slot.id, key: optionKey(item) }, loadedPlayer: null })}>
             <span>{item.label}<span className={styles.provider}>{source(item)}{option && optionKey(option) === optionKey(item) ? " · Selected" : ""}</span></span>
           </button>
-        </li>)}</ul> : <p className={styles.muted}>Options appear when a published hour begins.</p>}
+        </li>)}</ul> : <p className={styles.muted}>Options appear when a published slot begins.</p>}
       </aside>
     </div>
     <section className={styles.section} aria-labelledby="upcoming-slots">
@@ -157,7 +157,7 @@ export function ViewingRoom({ requested: initialRequest = null }: { requested?: 
             <a key={optionKey(stream)} href={providerUrl(stream)} target="_blank" rel="noopener noreferrer">{stream.label} · {source(stream)}</a>)}</div>
         </div></div>
       </li>)}</ol> : <p className={styles.muted}>{snapshot ? "No upcoming slots in this schedule window." : "Upcoming programming appears once the schedule loads."}</p>}
-      {upcoming.length > 12 && <p className={styles.muted}>Showing the next 12 published hours. Later hours appear as the schedule advances.</p>}
+      {upcoming.length > 12 && <p className={styles.muted}>Showing the next 12 published slots. Later slots appear as the schedule advances.</p>}
     </section>
   </>;
 }
