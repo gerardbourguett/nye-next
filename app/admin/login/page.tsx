@@ -10,7 +10,7 @@ export const metadata = { title: "Admin sign in", robots: { index: false, follow
 export default async function LoginPage() {
   const { status } = await adminAccess();
   if (status === "admin") redirect("/admin");
-  return <StreamShell admin title="Admin sign in." description="Private access to the hourly stream schedule.">
+  return <StreamShell admin title="Admin sign in." description="Private access to the stream schedule.">
     {status === "setup" ? <p className={styles.notice}>Admin sign in is not configured. The site owner must complete the Supabase setup before signing in.</p> : <LoginForm />}
   </StreamShell>;
 }

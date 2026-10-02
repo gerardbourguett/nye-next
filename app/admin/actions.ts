@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { createAuthClient } from "@/lib/supabase/server";
 import { adminAccess } from "@/lib/streams/server";
 import { runAdminLogin } from "@/lib/streams/admin-login";
-import { HOUR_MS, parseStreamSource, parseZone, PROVIDERS, UUID, validateOptions, validateWindow, type StreamOption } from "@/lib/streams/domain";
+import { parseStreamSource, parseZone, PROVIDERS, UUID, validateOptions, validateWindow, type StreamOption } from "@/lib/streams/domain";
 import { validateLocalInstant } from "@/lib/streams/time";
 
 export type ActionResult = { ok: boolean; message: string };
@@ -58,7 +58,12 @@ export async function saveSlot(form: FormData): Promise<ActionResult> {
     if (!title || title.length > 120) throw new Error("Enter a title of 1–120 characters.");
     const starts_at = field(form, "starts_at");
     validateLocalInstant(field(form, "local_start"), field(form, "timezone"), starts_at);
-    const ends_at = new Date(Date.parse(starts_at) + HOUR_MS).toISOString();
+    const hours = Number(field(form, "duration_hours"));
+    const minutes = Number(field(form, "duration_minutes"));
+    if (!Number.isInteger(hours) || !Number.isInteger(minutes) || hours < 0 || minutes < 0 || minutes > 59) {
+      throw new Error("Enter the duration as whole hours and minutes.");
+    }
+    const ends_at = new Date(Date.parse(starts_at) + (hours * 60 + minutes) * 60_000).toISOString();
     validateWindow(starts_at, ends_at);
     const count = Number(field(form, "count"));
     if (!Number.isInteger(count) || count < 1 || count > 4) throw new Error("Each slot needs 1–4 stream options.");
@@ -84,7 +89,7 @@ export async function saveSlot(form: FormData): Promise<ActionResult> {
     const result = id
       ? await client.from("stream_slots").update(payload).eq("id", id).select("id").maybeSingle()
       : await client.from("stream_slots").insert(payload).select("id").single();
-    if (result.error?.code === "23P01") return { ok: false, message: "This hour overlaps another published slot. Change the start time or save as a draft." };
+    if (result.error?.code === "23P01") return { ok: false, message: "This time overlaps another published slot. Change the start time or duration, or save as a draft." };
     if (result.error || !result.data) return { ok: false, message: "Slot not saved. Check your access and reload the schedule before retrying." };
   } catch { return { ok: false, message: "Save could not be confirmed. Reload the schedule before retrying to avoid duplicates." }; }
   revalidatePath("/admin");

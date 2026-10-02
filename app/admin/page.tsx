@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { StreamShell } from "@/components/streams/shell";
 import { adminAccess, SLOT_FIELDS } from "@/lib/streams/server";
-import { decodeSlots, optionKey, UUID, type Slot, type StreamOption } from "@/lib/streams/domain";
+import { decodeSlots, formatDuration, optionKey, UUID, type Slot, type StreamOption } from "@/lib/streams/domain";
 import { cityFromZoneName } from "@/lib/zones";
 import bundledZones from "@/data/timezones.json";
 import { DeleteSlot, SignOut } from "./controls";
@@ -26,7 +26,7 @@ export const metadata = { title: "Schedule manager", robots: { index: false, fol
 export default async function AdminPage({ searchParams }: { searchParams: Promise<{ edit?: string }> }) {
   const { client, status } = await adminAccess();
   if (status === "unauthenticated") redirect("/admin/login");
-  if (status !== "admin" || !client) return <StreamShell admin title="Schedule manager." description="Private hourly programming for the viewing room.">
+  if (status !== "admin" || !client) return <StreamShell admin title="Schedule manager." description="Private programming for the viewing room.">
     <p className={styles.notice}>{status === "setup" ? "Admin access is not configured. The site owner must complete the Supabase setup."
       : status === "forbidden" ? "This account does not have schedule access. Contact the site owner."
         : "Admin access is temporarily unavailable. Reload this page to try again."}</p>
@@ -58,7 +58,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
       <div className={styles.sectionHeading}><h2 id="stored-slots">Saved slots</h2><p className={styles.muted}>Latest 200 by start time · UTC</p></div>
       {!slots.length && !failure && <p className={styles.muted}>No slots saved. Create a draft above; nothing appears publicly until you publish it.</p>}
       <ol className={styles.schedule}>{slots.map((slot) => <li key={slot.id}>
-        <div className={styles.row}><div className={styles.time}><time dateTime={slot.starts_at}>{new Date(slot.starts_at).toISOString().slice(0, 16).replace("T", " ")} UTC</time><p className={styles.muted}>One hour · {slot.published ? "Published" : "Private draft"}</p></div>
+        <div className={styles.row}><div className={styles.time}><time dateTime={slot.starts_at}>{new Date(slot.starts_at).toISOString().slice(0, 16).replace("T", " ")} UTC</time><p className={styles.muted}>{formatDuration(Date.parse(slot.ends_at) - Date.parse(slot.starts_at))} · {slot.published ? "Published" : "Private draft"}</p></div>
           <div><h3>{slot.title}</h3><p className={styles.muted}>{slot.options.map((option) => option.label).join(" · ")}</p></div>
           <Link className={styles.button} href={`/admin?edit=${slot.id}`}>Edit<span className="sr-only"> {slot.title}</span></Link>
         </div>

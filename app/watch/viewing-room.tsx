@@ -1,12 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { activeSlot, decodeSlots, embedUrl, optionKey, providerName, providerUrl, reconcilePlayback, selectedOption,
+import { activeSlot, decodeSlots, embedUrl, HOUR_MS, optionKey, providerName, providerUrl, reconcilePlayback, selectedOption,
   type PlaybackState, type Slot, type StreamOption } from "@/lib/streams/domain";
 import { cityFromZoneName } from "@/lib/zones";
 import styles from "@/components/streams/surface.module.css";
 
-type Snapshot = { slots: Slot[]; serverNow: number; receivedAt: number };
+/** `askedFor` is the deep-linked slot id this snapshot was fetched with, if any. */
+type Snapshot = { slots: Slot[]; serverNow: number; receivedAt: number; askedFor: string | null };
 const localTime = (iso: string) => new Date(iso).toLocaleString(undefined, {
   month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", timeZoneName: "short",
 });
@@ -23,6 +24,12 @@ export function ViewingRoom({ requested: initialRequest = null }: { requested?: 
   const [browser, setBrowser] = useState<{ hostname: string; secure: boolean } | null>(null);
   const [playback, setPlayback] = useState<PlaybackState>({ selection: null, loadedPlayer: null });
   const [requested, setRequested] = useState<Selection | null>(initialRequest);
+  const [linkGone, setLinkGone] = useState(false);
+  // Read by the poll so a pending deep link fetches its own slot by id.
+  const pendingSlotId = useRef(initialRequest?.slotId ?? null);
+  useEffect(() => {
+    pendingSlotId.current = requested?.slotId ?? null;
+  }, [requested]);
   const [error, setError] = useState(false);
   const [pending, setPending] = useState(false);
   const [width, setWidth] = useState(0);
@@ -35,7 +42,9 @@ export function ViewingRoom({ requested: initialRequest = null }: { requested?: 
     inflight.current = controller;
     setPending(true);
     try {
-      const response = await fetch("/watch/schedule", { cache: "no-store", credentials: "omit",
+      const askedFor = pendingSlotId.current;
+      const query = askedFor ? `?${new URLSearchParams({ slot: askedFor })}` : "";
+      const response = await fetch(`/watch/schedule${query}`, { cache: "no-store", credentials: "omit",
         signal: AbortSignal.any([controller.signal, AbortSignal.timeout(12_000)]) });
       if (!response.ok) throw new Error("Unavailable");
       const value: unknown = await response.json();
@@ -43,7 +52,7 @@ export function ViewingRoom({ requested: initialRequest = null }: { requested?: 
           typeof value.serverNow !== "number" || !Number.isFinite(value.serverNow)) throw new Error("Invalid schedule");
       const slots = decodeSlots(value.slots).filter((slot) => slot.published);
       if (!controller.signal.aborted) {
-        setSnapshot({ slots, serverNow: value.serverNow, receivedAt: Date.now() });
+        setSnapshot({ slots, serverNow: value.serverNow, receivedAt: Date.now(), askedFor });
         setError(false);
       }
     } catch {
@@ -78,7 +87,10 @@ export function ViewingRoom({ requested: initialRequest = null }: { requested?: 
   const slot = snapshot && now !== null && !stale ? activeSlot(snapshot.slots, now) : undefined;
   const option = selectedOption(slot, playback.selection);
   const playerKey = slot && option ? `${slot.id}:${optionKey(option)}` : null;
-  const upcoming = snapshot && now !== null ? snapshot.slots.filter((item) => Date.parse(item.starts_at) > now) : [];
+  // "Next 14 days" only: a deep-linked slot further out is kept for its own
+  // notice, not listed as coming up.
+  const upcoming = snapshot && now !== null ? snapshot.slots.filter((item) =>
+    Date.parse(item.starts_at) > now && Date.parse(item.starts_at) <= now + 14 * 24 * HOUR_MS) : [];
   const ended = snapshot && now !== null && snapshot.slots.some((item) => Date.parse(item.ends_at) <= now);
   const canEmbed = option && browser && (option.provider !== "twitch" ? width >= 200 :
     width >= 400 && browser.secure && /^[a-zA-Z0-9.-]+$/.test(browser.hostname));
@@ -88,8 +100,17 @@ export function ViewingRoom({ requested: initialRequest = null }: { requested?: 
   // present and ended, or lost the option, drops the request.
   const requestedSlot = requested && snapshot ? snapshot.slots.find((item) => item.id === requested.slotId) : undefined;
   const requestedOption = requestedSlot?.options.find((item) => optionKey(item) === requested?.key);
+  // The server returns a requested slot by id whenever it is still published,
+  // so its absence from a snapshot fetched for it means deleted or unpublished.
+  if (requested && snapshot?.askedFor === requested.slotId && !requestedSlot) {
+    setRequested(null);
+    setLinkGone(true);
+  }
   if (requested && requestedSlot && now !== null && !stale) {
-    if (!requestedOption || Date.parse(requestedSlot.ends_at) <= now) setRequested(null);
+    if (!requestedOption) {
+      setRequested(null);
+      setLinkGone(true);
+    } else if (Date.parse(requestedSlot.ends_at) <= now) setRequested(null);
     else if (slot?.id === requested.slotId) {
       setRequested(null);
       setPlayback({ selection: requested, loadedPlayer: null });
@@ -101,12 +122,15 @@ export function ViewingRoom({ requested: initialRequest = null }: { requested?: 
   if (reconciledPlayback !== playback) setPlayback(reconciledPlayback);
   const loadedPlayer = reconciledPlayback.loadedPlayer;
   const emptyTitle = !snapshot ? error ? "The schedule is unavailable" : "Loading the schedule…" : stale
-    ? "Waiting for a fresh schedule" : upcoming.length ? "The next hour is on its way" : ended
+    ? "Waiting for a fresh schedule" : upcoming.length ? "The next slot is on its way" : ended
       ? "The published schedule has ended" : "No programming published yet";
 
   return <>
+    {linkGone && <p className={styles.notice} role="status">
+      The stream in your link is no longer scheduled. Choose from what is on now or coming up.
+    </p>}
     {requested && requestedSlot && requestedOption && slot?.id !== requested.slotId && <p className={styles.notice} role="status">
-      {requestedOption.label} ({source(requestedOption)}) is scheduled for {localTime(requestedSlot.starts_at)}. It will be selected here when that hour begins.
+      {requestedOption.label} ({source(requestedOption)}) is scheduled for {localTime(requestedSlot.starts_at)}. It will be selected here when that slot begins.
     </p>}
     {error && <div className={styles.notice} role="status">
       The schedule could not be refreshed. {snapshot && !stale ? "Showing the last received schedule. " : ""}
@@ -124,7 +148,7 @@ export function ViewingRoom({ requested: initialRequest = null }: { requested?: 
               <p>{option ? canEmbed ? "Load the selected provider’s player, then press play. Loading connects your browser to that provider."
                 : option.provider === "twitch" ? "Twitch needs HTTPS and at least 400 pixels of player width. Open it directly, or use a wider HTTPS window."
                   : "Open the video directly, or use a wider window to load the player."
-                : !snapshot ? error ? "Please try again shortly. You can still visit vanderfondi on Twitch above." : "Checking published hourly slots."
+                : !snapshot ? error ? "Please try again shortly. You can still visit vanderfondi on Twitch above." : "Checking published slots."
                   : stale ? "Playback is paused here until the schedule can be checked again."
                     : upcoming.length ? `Next: ${upcoming[0].title} · ${localTime(upcoming[0].starts_at)}`
                       : "There are no upcoming published slots in the next 14 days. Return to the relay or check back later."}</p>
@@ -140,13 +164,13 @@ export function ViewingRoom({ requested: initialRequest = null }: { requested?: 
         <p className={styles.muted} style={{ marginTop: "1rem" }}>Scheduled does not mean live. Offline, ended, restricted, or unavailable video messages come from the provider. If playback fails, use the direct link.</p>
       </section>
       <aside aria-labelledby="hour-options">
-        <h2 id="hour-options">This hour’s options</h2>
+        <h2 id="hour-options">Options on now</h2>
         {slot ? <ul className={styles.options}>{slot.options.map((item) => <li key={optionKey(item)}>
           <button className={`${styles.button} ${styles.choice}`} aria-pressed={option && optionKey(option) === optionKey(item)}
             onClick={() => setPlayback({ selection: { slotId: slot.id, key: optionKey(item) }, loadedPlayer: null })}>
             <span>{item.label}<span className={styles.provider}>{source(item)}{option && optionKey(option) === optionKey(item) ? " · Selected" : ""}</span></span>
           </button>
-        </li>)}</ul> : <p className={styles.muted}>Options appear when a published hour begins.</p>}
+        </li>)}</ul> : <p className={styles.muted}>Options appear when a published slot begins.</p>}
       </aside>
     </div>
     <section className={styles.section} aria-labelledby="upcoming-slots">
@@ -157,7 +181,7 @@ export function ViewingRoom({ requested: initialRequest = null }: { requested?: 
             <a key={optionKey(stream)} href={providerUrl(stream)} target="_blank" rel="noopener noreferrer">{stream.label} · {source(stream)}</a>)}</div>
         </div></div>
       </li>)}</ol> : <p className={styles.muted}>{snapshot ? "No upcoming slots in this schedule window." : "Upcoming programming appears once the schedule loads."}</p>}
-      {upcoming.length > 12 && <p className={styles.muted}>Showing the next 12 published hours. Later hours appear as the schedule advances.</p>}
+      {upcoming.length > 12 && <p className={styles.muted}>Showing the next 12 published slots. Later slots appear as the schedule advances.</p>}
     </section>
   </>;
 }

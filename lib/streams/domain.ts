@@ -15,6 +15,9 @@ export type Slot = {
 };
 
 export const HOUR_MS = 3_600_000;
+/** Slots default to one hour but may run 5 minutes to 7 days, e.g. for rehearsals. */
+export const MIN_SLOT_MS = 5 * 60_000;
+export const MAX_SLOT_MS = 7 * 24 * HOUR_MS;
 export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const TWITCH_ID = /^[a-z0-9_]{1,25}$/;
 const YOUTUBE_ID = /^[A-Za-z0-9_-]{11}$/;
@@ -106,10 +109,23 @@ export function validateOptions(value: unknown): StreamOption[] {
 export function validateWindow(start: string, end: string) {
   const from = Date.parse(start);
   const to = Date.parse(end);
-  if (!Number.isFinite(from) || !Number.isFinite(to) || to - from !== HOUR_MS ||
-      from < Date.UTC(2000, 0, 1) || to > Date.UTC(2101, 0, 1)) {
-    throw new Error("A slot must last exactly one hour, within years 2000–2100.");
+  const length = to - from;
+  if (!Number.isFinite(from) || !Number.isFinite(to) || length < MIN_SLOT_MS || length > MAX_SLOT_MS ||
+      length % 60_000 !== 0 || from < Date.UTC(2000, 0, 1) || to > Date.UTC(2101, 0, 1)) {
+    throw new Error("A slot must last whole minutes from 5 minutes to 7 days, within years 2000–2100.");
   }
+}
+
+/** "1 h", "45 min", "2 h 30 min", "3 d 4 h". */
+export function formatDuration(ms: number) {
+  const minutes = Math.round(ms / 60_000);
+  const parts: string[] = [];
+  const days = Math.floor(minutes / 1_440);
+  const hours = Math.floor((minutes % 1_440) / 60);
+  if (days) parts.push(`${days} d`);
+  if (hours) parts.push(`${hours} h`);
+  if (minutes % 60) parts.push(`${minutes % 60} min`);
+  return parts.join(" ") || "0 min";
 }
 
 export function overlaps(a: Pick<Slot, "starts_at" | "ends_at">, b: Pick<Slot, "starts_at" | "ends_at">) {
