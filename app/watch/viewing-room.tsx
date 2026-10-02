@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { activeSlot, decodeSlots, embedUrl, optionKey, providerName, providerUrl, reconcilePlayback, selectedOption,
+import { activeSlot, decodeSlots, embedUrl, HOUR_MS, optionKey, providerName, providerUrl, reconcilePlayback, selectedOption,
   type PlaybackState, type Slot, type StreamOption } from "@/lib/streams/domain";
 import { cityFromZoneName } from "@/lib/zones";
 import styles from "@/components/streams/surface.module.css";
@@ -87,7 +87,10 @@ export function ViewingRoom({ requested: initialRequest = null }: { requested?: 
   const slot = snapshot && now !== null && !stale ? activeSlot(snapshot.slots, now) : undefined;
   const option = selectedOption(slot, playback.selection);
   const playerKey = slot && option ? `${slot.id}:${optionKey(option)}` : null;
-  const upcoming = snapshot && now !== null ? snapshot.slots.filter((item) => Date.parse(item.starts_at) > now) : [];
+  // "Next 14 days" only: a deep-linked slot further out is kept for its own
+  // notice, not listed as coming up.
+  const upcoming = snapshot && now !== null ? snapshot.slots.filter((item) =>
+    Date.parse(item.starts_at) > now && Date.parse(item.starts_at) <= now + 14 * 24 * HOUR_MS) : [];
   const ended = snapshot && now !== null && snapshot.slots.some((item) => Date.parse(item.ends_at) <= now);
   const canEmbed = option && browser && (option.provider !== "twitch" ? width >= 200 :
     width >= 400 && browser.secure && /^[a-zA-Z0-9.-]+$/.test(browser.hostname));

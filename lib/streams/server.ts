@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { createAuthClient } from "@/lib/supabase/server";
 import { supabaseConfig, uncachedFetch } from "@/lib/supabase/config";
 import { authorizeAdmin } from "./authorization";
-import { decodeSlots, HOUR_MS, MIN_SLOT_MS, UUID } from "./domain";
+import { decodeSlots, HOUR_MS, MIN_SLOT_MS, UUID, type Slot } from "./domain";
 import { editionStreamWindow } from "./relay-link";
 
 export const SLOT_FIELDS = "id,title,starts_at,ends_at,published,options";
@@ -71,18 +71,23 @@ const PAGE = 500;
 export async function relaySchedule(year: number) {
   const { from, to } = editionStreamWindow(year);
   const signal = AbortSignal.timeout(4_000);
-  const maxRows = Math.ceil((to - from) / MIN_SLOT_MS) + 1;
-  const rows: unknown[] = [];
-  for (let offset = 0; offset < maxRows; offset += PAGE) {
-    const { data, error } = await publicClient().from("stream_slots").select(SLOT_FIELDS).eq("published", true)
+  const maxPages = Math.ceil((to - from) / MIN_SLOT_MS / PAGE) + 1;
+  const slots: Slot[] = [];
+  // Keyset pages: published slots cannot overlap, so a start instant names
+  // one slot, and each page resumes after the last start read. Unlike
+  // offsets, an edit between pages cannot shift rows into a skip or repeat.
+  let after: string | null = null;
+  for (let page = 0; page < maxPages; page++) {
+    let query = publicClient().from("stream_slots").select(SLOT_FIELDS).eq("published", true)
       .gt("ends_at", new Date(from).toISOString())
-      .lt("starts_at", new Date(to).toISOString())
-      .order("starts_at").order("id")
-      .range(offset, offset + PAGE - 1)
-      .abortSignal(signal);
+      .lt("starts_at", new Date(to).toISOString());
+    if (after) query = query.gt("starts_at", after);
+    const { data, error } = await query.order("starts_at").limit(PAGE).abortSignal(signal);
     if (error || !data) throw new Error("Schedule unavailable.");
-    rows.push(...data);
-    if (data.length < PAGE) break;
+    const decoded = decodeSlots(data);
+    slots.push(...decoded);
+    if (decoded.length < PAGE) break;
+    after = decoded[decoded.length - 1].starts_at;
   }
-  return decodeSlots(rows);
+  return slots;
 }

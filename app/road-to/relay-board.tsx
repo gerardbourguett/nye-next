@@ -48,7 +48,7 @@ function distinctCountries(places: RelayPlace[]) {
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
-/** Times only for short slots; dates too once a slot can span days. */
+/** Times only within one local day; dates too when a slot crosses midnight. */
 function formatSlotLocal(iso: string, withDate: boolean) {
   return new Date(iso).toLocaleString(undefined, {
     ...(withDate && { month: "short", day: "numeric" }),
@@ -70,7 +70,8 @@ function BandStreams({
       <ul>
         {list.map((stream) => {
           const ended = now !== null && Date.parse(stream.endsAt) <= now;
-          const long = Date.parse(stream.endsAt) - Date.parse(stream.startsAt) >= 12 * 3_600_000;
+          // Dates whenever the slot spans more than one of the viewer's days.
+          const long = new Date(stream.startsAt).toDateString() !== new Date(stream.endsAt).toDateString();
           return (
             <li key={`${stream.slotId}:${stream.key}`}>
               {ended ? (
