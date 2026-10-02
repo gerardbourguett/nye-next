@@ -53,12 +53,13 @@ test("1–4 unique ordered options are accepted; zero, five, duplicates, and uns
     [{ ...twitch, label: "a".repeat(121) }], [{ ...twitch, html: "<iframe>" }]]) assert.throws(() => validateOptions(options));
 });
 
-test("slots last whole minutes from 5 minutes to 7 days within the supported range", () => {
+test("slots last whole minutes from 5 minutes to 92 days within the supported range", () => {
   validateWindow(slot.starts_at, slot.ends_at);
   validateWindow(slot.starts_at, "2026-12-31T23:05:00.000Z");
   validateWindow(slot.starts_at, "2027-01-07T23:00:00.000Z");
+  validateWindow(slot.starts_at, "2027-04-02T23:00:00.000Z"); // exactly 92 days
   for (const end of [slot.starts_at, "invalid", "2026-12-31T23:04:00.000Z", "2026-12-31T23:59:59.999Z",
-    "2027-01-01T00:00:00.001Z", "2027-01-07T23:01:00.000Z", "2026-12-31T22:00:00.000Z"]) {
+    "2027-01-01T00:00:00.001Z", "2027-04-02T23:01:00.000Z", "2026-12-31T22:00:00.000Z"]) {
     assert.throws(() => validateWindow(slot.starts_at, end), end);
   }
   assert.equal(formatDuration(3_600_000), "1 h");

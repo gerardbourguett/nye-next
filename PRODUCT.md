@@ -34,7 +34,7 @@ Most countdowns count to one midnight: the viewer's own. This one follows midnig
 - Per-hour stream slots: each hour of the broadcast holds **one to four** stream options. The page must be a template that accepts this full range, not a layout tuned to a single count.
 - **Year rollover (implemented without per-edition accent colors):** when the target midnight passes, the surface does not end. It re-identifies as `#2028Live` and begins counting toward the following January 1. Each edition carries its own accent color; orange is bound to 2028.
 - Confirmed viewing room: Twitch and YouTube embeds, one selected player at a time, no autoplay, and direct provider links as fallback.
-- Confirmed programming management: a private admin panel, Supabase authentication with explicit admin membership, and PostgreSQL persistence for slots with one to four options. Slots default to one hour but may run 5 minutes to 7 days so rehearsals can stay on air. Visitors do not need accounts.
+- Confirmed programming management: a private admin panel, Supabase authentication with explicit admin membership, and PostgreSQL persistence for slots with one to four options. Slots default to one hour but may run 5 minutes to 92 days so rehearsals can stay on air. Visitors do not need accounts.
 - Explicitly undecided: whether the pre-broadcast promotional role is in scope; the accent color for the 2027 edition. The viewing room and admin panel preserve the incumbent semantic theme palette and emerald accents, without a global redesign.
 
 ## Brand Commitments
