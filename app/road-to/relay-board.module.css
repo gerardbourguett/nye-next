@@ -599,6 +599,117 @@
   color: var(--relay-ink);
 }
 
+.mapSection {
+  padding-block: 2.5rem 1rem;
+  border-bottom: 1px solid var(--relay-line);
+}
+
+.map {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.mapZone {
+  fill: color-mix(in oklab, var(--relay-muted) 28%, var(--relay-ground));
+  stroke: var(--relay-ground);
+  stroke-width: 0.6;
+  stroke-linejoin: round;
+  cursor: pointer;
+  transition: fill 300ms ease;
+}
+
+.mapZone:hover {
+  fill: color-mix(in oklab, var(--relay-muted) 45%, var(--relay-ground));
+}
+
+.mapUnlisted {
+  fill: color-mix(in oklab, var(--relay-muted) 14%, var(--relay-ground));
+  cursor: default;
+}
+
+.mapCrossed,
+.mapCrossed:hover {
+  fill: var(--relay-highlight);
+}
+
+.mapNext,
+.mapNext:hover {
+  fill: var(--relay-ink);
+}
+
+.mapViewer {
+  stroke: var(--relay-highlight);
+  stroke-width: 3.5;
+  paint-order: stroke;
+}
+
+.mapSelected,
+.mapZone:focus-visible {
+  stroke: var(--relay-ink);
+  stroke-width: 2.4;
+  outline: none;
+}
+
+.mapLegend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.5rem;
+  margin: 1rem 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--relay-muted);
+  font-size: 0.75rem;
+}
+
+.mapLegend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.legendSwatch {
+  width: 0.75rem;
+  height: 0.75rem;
+  background: color-mix(in oklab, var(--relay-muted) 28%, var(--relay-ground));
+}
+
+.legendSwatch.mapCrossed {
+  background: var(--relay-highlight);
+}
+
+.legendSwatch.mapNext {
+  background: var(--relay-ink);
+}
+
+.legendSwatch.mapViewer {
+  border: 2px solid var(--relay-highlight);
+}
+
+.mapCaption {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+  min-height: 3.5rem;
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.mapCaption p {
+  margin: 0;
+}
+
+.mapCaption .textButton {
+  margin-top: 0;
+}
+
+.mapCredit {
+  margin: 0;
+  color: var(--relay-muted);
+  font-size: 0.6875rem;
+}
+
 .foundPlace {
   font-weight: 700;
   text-decoration: underline;
@@ -733,7 +844,8 @@
 
 @media (prefers-reduced-motion: reduce) {
   .crossing,
-  .progressFill {
+  .progressFill,
+  .mapZone {
     transition: none;
   }
 }
