@@ -6,7 +6,8 @@ import { activeSlot, decodeSlots, embedUrl, optionKey, providerName, providerUrl
 import { cityFromZoneName } from "@/lib/zones";
 import styles from "@/components/streams/surface.module.css";
 
-type Snapshot = { slots: Slot[]; serverNow: number; receivedAt: number };
+/** `askedFor` is the deep-linked slot id this snapshot was fetched with, if any. */
+type Snapshot = { slots: Slot[]; serverNow: number; receivedAt: number; askedFor: string | null };
 const localTime = (iso: string) => new Date(iso).toLocaleString(undefined, {
   month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", timeZoneName: "short",
 });
@@ -23,6 +24,7 @@ export function ViewingRoom({ requested: initialRequest = null }: { requested?: 
   const [browser, setBrowser] = useState<{ hostname: string; secure: boolean } | null>(null);
   const [playback, setPlayback] = useState<PlaybackState>({ selection: null, loadedPlayer: null });
   const [requested, setRequested] = useState<Selection | null>(initialRequest);
+  const [linkGone, setLinkGone] = useState(false);
   // Read by the poll so a pending deep link fetches its own slot by id.
   const pendingSlotId = useRef(initialRequest?.slotId ?? null);
   useEffect(() => {
@@ -40,7 +42,8 @@ export function ViewingRoom({ requested: initialRequest = null }: { requested?: 
     inflight.current = controller;
     setPending(true);
     try {
-      const query = pendingSlotId.current ? `?${new URLSearchParams({ slot: pendingSlotId.current })}` : "";
+      const askedFor = pendingSlotId.current;
+      const query = askedFor ? `?${new URLSearchParams({ slot: askedFor })}` : "";
       const response = await fetch(`/watch/schedule${query}`, { cache: "no-store", credentials: "omit",
         signal: AbortSignal.any([controller.signal, AbortSignal.timeout(12_000)]) });
       if (!response.ok) throw new Error("Unavailable");
@@ -49,7 +52,7 @@ export function ViewingRoom({ requested: initialRequest = null }: { requested?: 
           typeof value.serverNow !== "number" || !Number.isFinite(value.serverNow)) throw new Error("Invalid schedule");
       const slots = decodeSlots(value.slots).filter((slot) => slot.published);
       if (!controller.signal.aborted) {
-        setSnapshot({ slots, serverNow: value.serverNow, receivedAt: Date.now() });
+        setSnapshot({ slots, serverNow: value.serverNow, receivedAt: Date.now(), askedFor });
         setError(false);
       }
     } catch {
@@ -94,8 +97,17 @@ export function ViewingRoom({ requested: initialRequest = null }: { requested?: 
   // present and ended, or lost the option, drops the request.
   const requestedSlot = requested && snapshot ? snapshot.slots.find((item) => item.id === requested.slotId) : undefined;
   const requestedOption = requestedSlot?.options.find((item) => optionKey(item) === requested?.key);
+  // The server returns a requested slot by id whenever it is still published,
+  // so its absence from a snapshot fetched for it means deleted or unpublished.
+  if (requested && snapshot?.askedFor === requested.slotId && !requestedSlot) {
+    setRequested(null);
+    setLinkGone(true);
+  }
   if (requested && requestedSlot && now !== null && !stale) {
-    if (!requestedOption || Date.parse(requestedSlot.ends_at) <= now) setRequested(null);
+    if (!requestedOption) {
+      setRequested(null);
+      setLinkGone(true);
+    } else if (Date.parse(requestedSlot.ends_at) <= now) setRequested(null);
     else if (slot?.id === requested.slotId) {
       setRequested(null);
       setPlayback({ selection: requested, loadedPlayer: null });
@@ -111,6 +123,9 @@ export function ViewingRoom({ requested: initialRequest = null }: { requested?: 
       ? "The published schedule has ended" : "No programming published yet";
 
   return <>
+    {linkGone && <p className={styles.notice} role="status">
+      The stream in your link is no longer scheduled. Choose from what is on now or coming up.
+    </p>}
     {requested && requestedSlot && requestedOption && slot?.id !== requested.slotId && <p className={styles.notice} role="status">
       {requestedOption.label} ({source(requestedOption)}) is scheduled for {localTime(requestedSlot.starts_at)}. It will be selected here when that slot begins.
     </p>}
