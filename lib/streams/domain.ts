@@ -15,9 +15,11 @@ export type Slot = {
 };
 
 export const HOUR_MS = 3_600_000;
-/** Slots default to one hour but may run 5 minutes to 7 days, e.g. for rehearsals. */
+/** Slots default to one hour but may run 5 minutes to 92 days, e.g. for rehearsals left on air for months. */
 export const MIN_SLOT_MS = 5 * 60_000;
-export const MAX_SLOT_MS = 7 * 24 * HOUR_MS;
+export const MAX_SLOT_DAYS = 92;
+export const MAX_SLOT_MS = MAX_SLOT_DAYS * 24 * HOUR_MS;
+export const SLOT_LENGTHS = `5 minutes to ${MAX_SLOT_DAYS} days`;
 export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const TWITCH_ID = /^[a-z0-9_]{1,25}$/;
 const YOUTUBE_ID = /^[A-Za-z0-9_-]{11}$/;
@@ -112,7 +114,7 @@ export function validateWindow(start: string, end: string) {
   const length = to - from;
   if (!Number.isFinite(from) || !Number.isFinite(to) || length < MIN_SLOT_MS || length > MAX_SLOT_MS ||
       length % 60_000 !== 0 || from < Date.UTC(2000, 0, 1) || to > Date.UTC(2101, 0, 1)) {
-    throw new Error("A slot must last whole minutes from 5 minutes to 7 days, within years 2000–2100.");
+    throw new Error(`A slot must last whole minutes from ${SLOT_LENGTHS}, within years 2000–2100.`);
   }
 }
 

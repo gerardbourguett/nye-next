@@ -58,12 +58,13 @@ export async function saveSlot(form: FormData): Promise<ActionResult> {
     if (!title || title.length > 120) throw new Error("Enter a title of 1–120 characters.");
     const starts_at = field(form, "starts_at");
     validateLocalInstant(field(form, "local_start"), field(form, "timezone"), starts_at);
+    const days = Number(field(form, "duration_days"));
     const hours = Number(field(form, "duration_hours"));
     const minutes = Number(field(form, "duration_minutes"));
-    if (!Number.isInteger(hours) || !Number.isInteger(minutes) || hours < 0 || minutes < 0 || minutes > 59) {
-      throw new Error("Enter the duration as whole hours and minutes.");
+    if (![days, hours, minutes].every(Number.isInteger) || days < 0 || hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+      throw new Error("Enter the duration as whole days, hours (0–23) and minutes (0–59).");
     }
-    const ends_at = new Date(Date.parse(starts_at) + (hours * 60 + minutes) * 60_000).toISOString();
+    const ends_at = new Date(Date.parse(starts_at) + ((days * 24 + hours) * 60 + minutes) * 60_000).toISOString();
     validateWindow(starts_at, ends_at);
     const count = Number(field(form, "count"));
     if (!Number.isInteger(count) || count < 1 || count > 4) throw new Error("Each slot needs 1–4 stream options.");

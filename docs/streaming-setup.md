@@ -29,6 +29,11 @@ credenciales ni una programación de ejemplo.
    en minutos exactos (útil para ensayos generales). Las franjas existentes siguen
    siendo válidas. Mientras no se aplique, guardar una duración distinta de 1 hora
    falla con “Slot not saved”.
+   Por último, ejecute una vez
+   [`202610030001_longer_slots.sql`](../supabase/migrations/202610030001_longer_slots.sql).
+   Amplía el máximo de esa regla de 7 a 92 días, para dejar un ensayo al aire hasta
+   Año Nuevo. Las franjas existentes siguen siendo válidas. Mientras no se aplique,
+   guardar una franja de más de 7 días falla con “Slot not saved”.
 3. En **Authentication → Providers → Email**, habilite el inicio de sesión con correo
    electrónico y contraseña. En la configuración de Auth,
    **desactive “Allow new users to sign up”**. Mantenga esa opción desactivada;
