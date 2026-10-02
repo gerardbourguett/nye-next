@@ -279,8 +279,8 @@ y del navegador están pendientes; las comprobaciones unitarias no los sustituye
   `Australia/Sydney`). El relay agrupa las opciones publicadas por el desfase que
   ese lugar tiene en su medianoche de Año Nuevo y las muestra en ese cruce, con un
   enlace a `/watch?slot=…&stream=…`.
-- Solo se consideran franjas publicadas que empiezan entre el 30 de diciembre a las
-  12:00 UTC y el 2 de enero a las 00:00 UTC de la edición actual
+- Solo se consideran franjas publicadas que se superponen con el período entre el
+  30 de diciembre a las 12:00 UTC y el 2 de enero a las 00:00 UTC de la edición actual
   (`editionStreamWindow()` en `lib/streams/relay-link.ts`).
 - El enlace profundo selecciona el stream cuando empieza su hora; el reproductor
   sigue cargándose solo con un clic.

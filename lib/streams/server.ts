@@ -42,11 +42,11 @@ export async function publicSchedule() {
   return { slots: decodeSlots(data), serverNow: Date.now() };
 }
 
-/** Published slots that can belong to the midnight wave into `year`. */
+/** Published slots overlapping the midnight wave into `year`. */
 export async function relaySchedule(year: number) {
   const { from, to } = editionStreamWindow(year);
   const { data, error } = await publicClient().from("stream_slots").select(SLOT_FIELDS).eq("published", true)
-    .gte("starts_at", new Date(from).toISOString())
+    .gt("ends_at", new Date(from).toISOString())
     .lt("starts_at", new Date(to).toISOString())
     .order("starts_at").limit(200)
     // Bounded like the catalog read: the relay never waits long on programming.

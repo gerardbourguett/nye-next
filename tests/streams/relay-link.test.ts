@@ -39,6 +39,15 @@ test("drafts, other editions, unplaced and unsupported places are left out", () 
   assert.deepEqual(Object.keys(crossingStreams([slot("5", new Date(from).toISOString(), [sydney])], 2027)), ["660"]);
 });
 
+test("a long slot that starts before the window but overlaps it is included", () => {
+  const { from } = editionStreamWindow(2027);
+  const rehearsal = { ...slot("6", new Date(from - 3 * 86_400_000).toISOString(), [sydney]),
+    ends_at: new Date(from + 3_600_000).toISOString() };
+  assert.deepEqual(Object.keys(crossingStreams([rehearsal], 2027)), ["660"]);
+  const endsAtWindow = { ...rehearsal, ends_at: new Date(from).toISOString() };
+  assert.deepEqual(crossingStreams([endsAtWindow], 2027), {});
+});
+
 test("a crossing lists its streams by start time, then label", () => {
   const melbourne = { ...sydney, id: "UCzzzzzzzzzzzzzzzzzzzzzz", label: "Melbourne", zone: "Australia/Melbourne" };
   const streams = crossingStreams([

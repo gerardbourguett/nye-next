@@ -19,7 +19,7 @@ export type CrossingStream = {
 export type CrossingStreams = Record<number, CrossingStream[]>;
 
 /**
- * Slots that can belong to the wave into `year`: the first midnight (UTC+14)
+ * Slots overlapping this window can belong to the wave into `year`: the first midnight (UTC+14)
  * is 10:00 UTC on December 31 and the last (UTC−12) is 12:00 UTC on
  * January 1, with room on both sides for pre-shows and late celebrations.
  */
@@ -38,8 +38,9 @@ export function crossingStreams(slots: readonly Slot[], year: number): CrossingS
   const result: CrossingStreams = {};
 
   for (const slot of slots) {
-    const start = Date.parse(slot.starts_at);
-    if (!slot.published || start < from || start >= to) continue;
+    // Overlap, not start: a long rehearsal may begin before the window and
+    // still be on air during the crossings.
+    if (!slot.published || Date.parse(slot.ends_at) <= from || Date.parse(slot.starts_at) >= to) continue;
     for (const option of slot.options) {
       if (!option.zone) continue;
       if (!offsets.has(option.zone)) {

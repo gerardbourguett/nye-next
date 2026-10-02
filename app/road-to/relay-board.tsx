@@ -48,8 +48,10 @@ function distinctCountries(places: RelayPlace[]) {
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
-function formatSlotLocal(iso: string) {
-  return new Date(iso).toLocaleTimeString(undefined, {
+/** Times only for short slots; dates too once a slot can span days. */
+function formatSlotLocal(iso: string, withDate: boolean) {
+  return new Date(iso).toLocaleString(undefined, {
+    ...(withDate && { month: "short", day: "numeric" }),
     hour: "2-digit",
     minute: "2-digit",
   });
@@ -68,6 +70,7 @@ function BandStreams({
       <ul>
         {list.map((stream) => {
           const ended = now !== null && Date.parse(stream.endsAt) <= now;
+          const long = Date.parse(stream.endsAt) - Date.parse(stream.startsAt) >= 12 * 3_600_000;
           return (
             <li key={`${stream.slotId}:${stream.key}`}>
               {ended ? (
@@ -84,11 +87,11 @@ function BandStreams({
                     {" · "}
                     {ended ? "Ended " : "Scheduled "}
                     <time dateTime={stream.startsAt}>
-                      {formatSlotLocal(stream.startsAt)}
+                      {formatSlotLocal(stream.startsAt, long)}
                     </time>
                     –
                     <time dateTime={stream.endsAt}>
-                      {formatSlotLocal(stream.endsAt)}
+                      {formatSlotLocal(stream.endsAt, long)}
                     </time>
                   </>
                 )}

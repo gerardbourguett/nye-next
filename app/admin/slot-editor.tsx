@@ -112,10 +112,8 @@ export function SlotEditor({ slot, places, saved }: { slot?: Slot; places: Place
               <input id={`${prefix}-hours`} name="duration_hours" type="number" inputMode="numeric" min={0} max={168} step={1}
                 value={durationHours} onChange={(event) => setDurationHours(event.target.value)} required /></div>
             <div className={styles.field}><label htmlFor={`${prefix}-minutes`}>Minutes</label>
-              <select id={`${prefix}-minutes`} name="duration_minutes" value={durationMinutes} onChange={(event) => setDurationMinutes(event.target.value)}>
-                {Array.from({ length: 12 }, (_, step) => String(step * 5)).concat(
-                  Number(durationMinutes) % 5 ? [durationMinutes] : []).map((value) => <option key={value} value={value}>{value}</option>)}
-              </select></div>
+              <input id={`${prefix}-minutes`} name="duration_minutes" type="number" inputMode="numeric" min={0} max={59} step={1}
+                value={durationMinutes} onChange={(event) => setDurationMinutes(event.target.value)} required /></div>
           </div>
           <p className={styles.muted}>{durationValid ? `Elapsed time: ${formatDuration(durationMs)}, regardless of clock changes.` : "Choose between 5 minutes and 7 days."}</p>
           {preview && <p className={`${styles.muted} ${styles.time}`}>UTC window: {preview}</p>}
