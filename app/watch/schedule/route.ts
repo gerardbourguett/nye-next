@@ -3,8 +3,10 @@ import { publicSchedule } from "@/lib/streams/server";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+/** `?slot=<uuid>` adds that published slot (a relay deep link) wherever it falls. */
+export async function GET(request: Request) {
   const headers = { "Cache-Control": "no-store, max-age=0" };
-  try { return NextResponse.json(await publicSchedule(), { headers }); }
+  const slot = new URL(request.url).searchParams.get("slot") ?? undefined;
+  try { return NextResponse.json(await publicSchedule(slot), { headers }); }
   catch { return NextResponse.json({ error: "Schedule unavailable. Please try again shortly." }, { status: 503, headers }); }
 }

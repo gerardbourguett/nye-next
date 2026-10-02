@@ -23,6 +23,11 @@ export function ViewingRoom({ requested: initialRequest = null }: { requested?: 
   const [browser, setBrowser] = useState<{ hostname: string; secure: boolean } | null>(null);
   const [playback, setPlayback] = useState<PlaybackState>({ selection: null, loadedPlayer: null });
   const [requested, setRequested] = useState<Selection | null>(initialRequest);
+  // Read by the poll so a pending deep link fetches its own slot by id.
+  const pendingSlotId = useRef(initialRequest?.slotId ?? null);
+  useEffect(() => {
+    pendingSlotId.current = requested?.slotId ?? null;
+  }, [requested]);
   const [error, setError] = useState(false);
   const [pending, setPending] = useState(false);
   const [width, setWidth] = useState(0);
@@ -35,7 +40,8 @@ export function ViewingRoom({ requested: initialRequest = null }: { requested?: 
     inflight.current = controller;
     setPending(true);
     try {
-      const response = await fetch("/watch/schedule", { cache: "no-store", credentials: "omit",
+      const query = pendingSlotId.current ? `?${new URLSearchParams({ slot: pendingSlotId.current })}` : "";
+      const response = await fetch(`/watch/schedule${query}`, { cache: "no-store", credentials: "omit",
         signal: AbortSignal.any([controller.signal, AbortSignal.timeout(12_000)]) });
       if (!response.ok) throw new Error("Unavailable");
       const value: unknown = await response.json();
