@@ -7,7 +7,14 @@
   color: var(--foreground);
   background: var(--background);
   --stream-highlight: var(--color-emerald-500, oklch(69.6% 0.17 162.48));
+  /* Only for a provider-confirmed live stream, never for "scheduled". */
+  --stream-live: oklch(0.6 0.22 25);
 }
+.wide { width: min(100% - 3rem, 100rem); }
+/* The room leads with the player, Twitch-style: a compact title row. */
+.wide .intro { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.25rem 1.5rem; padding-block: 1.25rem 1.5rem; }
+.wide .intro h1 { font-size: 2.25rem; }
+.wide .intro p { margin-top: 0; }
 .surface :focus-visible { outline: 2px solid var(--foreground); outline-offset: 4px; }
 .surface a { text-underline-offset: 4px; }
 .surface a:hover { text-decoration: underline; }
@@ -30,8 +37,90 @@
 .surface h2 { font-size: 1.25rem; font-weight: 650; line-height: 1.4; }
 .surface h3 { font-size: 1rem; font-weight: 650; }
 .muted { color: var(--muted-foreground); line-height: 1.65; }
-.room { display: grid; grid-template-columns: minmax(0, 1fr) 18rem; gap: 2rem; align-items: start; }
-.playerColumn { min-width: 0; }
+.room {
+  display: grid;
+  grid-template-columns: 15rem minmax(0, 1fr) 21rem;
+  grid-template-areas: "rail stage chat";
+  gap: 1.5rem;
+  align-items: start;
+}
+.stage { grid-area: stage; min-width: 0; }
+.stage .actions { margin-top: 1rem; }
+.fineprint { margin-top: 1rem; font-size: 0.8125rem; }
+
+/* Left rail: Twitch-style channel list */
+.rail { grid-area: rail; min-width: 0; }
+.railHeading { font-size: 0.75rem !important; font-weight: 700 !important; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted-foreground); }
+.rail h3.railHeading { margin-top: 1.75rem; }
+.railSlot { margin-top: 0.25rem; font-size: 0.875rem; overflow-wrap: anywhere; }
+.channels { padding: 0; margin: 0.75rem 0 0; list-style: none; display: grid; gap: 0.25rem; }
+.channel {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto auto; column-gap: 0.75rem;
+  width: 100%; min-height: 3.5rem; padding: 0.5rem; border: 0; border-radius: 0.375rem;
+  background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer;
+}
+.channel > .avatar { grid-row: span 2; align-self: center; }
+.channel > .status { grid-column: 2; }
+.channel:hover { background: var(--muted); }
+.channel[aria-pressed="true"] { background: var(--muted); box-shadow: inset 3px 0 var(--stream-highlight); }
+.channelText { display: grid; min-width: 0; }
+.channelName { font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.channelMeta { font-size: 0.8125rem; color: var(--muted-foreground); overflow-wrap: anywhere; }
+.upNext { padding: 0; margin: 0.5rem 0 0; list-style: none; display: grid; gap: 0.75rem; font-size: 0.875rem; }
+.upNext li { display: grid; gap: 0.125rem; }
+.upNext time { font-size: 0.75rem; color: var(--muted-foreground); }
+
+/* Avatars and live status */
+.avatar {
+  display: inline-grid; place-items: center; flex: none; width: 2.25rem; height: 2.25rem; overflow: hidden;
+  border-radius: 50%; background: var(--muted); color: var(--muted-foreground); font-weight: 700; font-size: 0.875rem;
+}
+.avatar img { width: 100%; height: 100%; object-fit: cover; }
+.avatarLarge { width: 3.5rem; height: 3.5rem; font-size: 1.25rem; }
+.avatarLive { box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--stream-live); }
+.status { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.375rem; font-size: 0.8125rem; font-variant-numeric: tabular-nums; }
+.liveBadge {
+  padding: 0.0625rem 0.375rem; border-radius: 0.25rem; background: var(--stream-live); color: #fff;
+  font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+}
+
+/* Under the player */
+.streamInfo { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 1rem; align-items: start; margin-top: 1rem; }
+.streamText { min-width: 0; }
+.streamText h2 { overflow-wrap: anywhere; }
+.streamTitle { margin-top: 0.125rem; font-weight: 500; overflow-wrap: anywhere; }
+.streamStats { display: grid; justify-items: end; gap: 0.25rem; }
+
+/* Poster before the player loads */
+.poster { position: relative; isolation: isolate; color: #fff; }
+.poster::before { content: ""; position: absolute; inset: 0; z-index: -1; background: rgb(0 0 0 / 0.55); }
+.posterImage { position: absolute; inset: 0; z-index: -2; width: 100%; height: 100%; object-fit: cover; }
+.player > .poster { width: 100%; height: 100%; display: grid; place-content: center; justify-items: center; max-width: none; }
+
+/* Chat */
+.chat {
+  grid-area: chat; display: grid; grid-template-rows: auto minmax(0, 1fr); min-width: 0;
+  height: min(78vh, 46rem); border: 1px solid var(--border);
+}
+.chatHeader { display: grid; gap: 0.5rem; padding: 0.75rem; border-bottom: 1px solid var(--border); }
+.chatHeader h2 { font-size: 0.875rem !important; text-transform: uppercase; letter-spacing: 0.08em; }
+.chatTabs { display: flex; flex-wrap: wrap; gap: 0.25rem; }
+.chatTab {
+  min-height: 2.25rem; padding: 0.25rem 0.625rem; border: 1px solid var(--border); border-radius: 0.375rem;
+  background: transparent; color: inherit; font: inherit; font-size: 0.8125rem; font-weight: 600; cursor: pointer;
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.chatTab[aria-pressed="true"] { background: var(--muted); border-color: var(--stream-highlight); }
+.chatBody { display: grid; place-items: center; min-height: 0; }
+.chatBody iframe { width: 100%; height: 100%; border: 0; }
+
+/* Coming up cards */
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr)); gap: 1rem; padding: 0; list-style: none; }
+.card { display: grid; align-content: start; gap: 0.5rem; padding: 1rem; border: 1px solid var(--border); border-radius: 0.5rem; }
+.card h3 { overflow-wrap: anywhere; }
+.cardStreams { display: grid; gap: 0.25rem; padding: 0; margin: 0; list-style: none; }
+.cardStream { display: flex; align-items: center; gap: 0.625rem; min-height: 2.75rem; color: inherit; }
+.cardStream:hover .channelName { text-decoration: underline; }
 .player {
   display: grid;
   place-items: center;
@@ -96,11 +185,19 @@
 .delete summary { display: inline-flex; align-items: center; min-height: 2.75rem; cursor: pointer; text-decoration: underline; text-underline-offset: 4px; }
 .delete form { margin-block: 0.5rem 1rem; display: grid; justify-items: start; gap: 0.75rem; }
 .loading { min-height: 20rem; background: var(--muted); padding: 2rem; }
-@media (max-width: 64rem) { .room { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 80rem) {
+  .room { grid-template-columns: minmax(0, 1fr) 20rem; grid-template-areas: "stage chat" "rail rail"; }
+}
+@media (max-width: 64rem) {
+  .room { grid-template-columns: minmax(0, 1fr); grid-template-areas: "stage" "rail" "chat"; }
+  .chat { height: 30rem; }
+}
 @media (max-width: 40rem) {
   .surface { width: calc(100% - 2rem); }
   .intro h1 { font-size: 2.75rem; }
   .row, .optionGrid { grid-template-columns: minmax(0, 1fr); gap: 0.75rem; }
   .player { aspect-ratio: auto; }
+  .streamInfo { grid-template-columns: auto minmax(0, 1fr); }
+  .streamStats { grid-column: 1 / -1; justify-items: start; }
   .intro { padding-top: 2rem; }
 }

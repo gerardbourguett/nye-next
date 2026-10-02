@@ -2,11 +2,11 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import styles from "./surface.module.css";
 
-export function StreamShell({ title, description, children, admin = false }: {
-  title: string; description: string; children: ReactNode; admin?: boolean;
+export function StreamShell({ title, description, children, admin = false, wide = false }: {
+  title: string; description: string; children: ReactNode; admin?: boolean; wide?: boolean;
 }) {
   return (
-    <main className={styles.surface}>
+    <main className={wide ? `${styles.surface} ${styles.wide}` : styles.surface}>
       <nav className={styles.nav} aria-label={admin ? "Admin navigation" : "Room navigation"}>
         <Link href="/road-to">Back to the relay</Link>
         <div className={styles.navGroup}>

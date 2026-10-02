@@ -186,6 +186,25 @@ export function embedUrl(option: StreamOption, hostname: string) {
   return `https://player.twitch.tv/?${new URLSearchParams({ channel: option.id, parent: hostname, autoplay: "false" })}`;
 }
 
+/** The broadcast's own Twitch channel (PRODUCT.md): its chat is always on offer. */
+export const MAIN_CHANNEL = "vanderfondi";
+
+const HOSTNAME = /^[a-zA-Z0-9.-]+$/;
+
+/** Twitch's embeddable chat, which like its player needs HTTPS and a declared parent. */
+export function twitchChatUrl(channel: string, hostname: string, dark: boolean) {
+  if (!validProviderId("twitch", channel) || !HOSTNAME.test(hostname)) throw new Error("Unsupported Twitch chat.");
+  const query = new URLSearchParams({ parent: hostname });
+  if (dark) query.set("darkpopout", "");
+  return `https://www.twitch.tv/embed/${channel}/chat?${query}`;
+}
+
+/** YouTube's live chat for one live video; YouTube shows its own message once the stream ends. */
+export function youtubeChatUrl(videoId: string, hostname: string) {
+  if (!validProviderId("youtube", videoId) || !HOSTNAME.test(hostname)) throw new Error("Unsupported YouTube chat.");
+  return `https://www.youtube.com/live_chat?${new URLSearchParams({ v: videoId, embed_domain: hostname })}`;
+}
+
 export function decodeSlots(value: unknown): Slot[] {
   if (!Array.isArray(value)) throw new Error("Invalid schedule.");
   return value.map((row: unknown) => {

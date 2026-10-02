@@ -289,3 +289,28 @@ y del navegador están pendientes; las comprobaciones unitarias no los sustituye
   el mismo día. Si el canal no está en vivo, el mensaje lo muestra YouTube.
 - “Reuse a saved stream” lista las opciones distintas de las últimas 200 franjas;
   no existe una tabla de canales aparte.
+
+## Estado en vivo, espectadores y chat (opcional)
+
+`/watch` muestra si cada stream está en vivo, su título, espectadores, tiempo al
+aire, miniatura y avatar solo cuando el proveedor lo confirma. Sin estas variables
+todo funciona igual y los streams aparecen como “Scheduled”. Son **solo de servidor**:
+no use el prefijo `NEXT_PUBLIC_`. Configúrelas en `.env.local` y en Vercel
+(Settings → Environment Variables) y vuelva a desplegar.
+
+1. **Twitch** (`TWITCH_CLIENT_ID`, `TWITCH_CLIENT_SECRET`): en
+   <https://dev.twitch.tv/console/apps> registre una aplicación (categoría
+   “Website Integration”, OAuth Redirect URL `http://localhost`), copie el
+   Client ID y genere un Client Secret. Se usa el flujo *client credentials*:
+   no requiere iniciar sesión ni permisos de usuario.
+2. **YouTube** (`YOUTUBE_API_KEY`): en Google Cloud Console cree un proyecto,
+   habilite “YouTube Data API v3” y cree una clave de API. Restrínjala a esa API.
+   Cada consulta de videos cuesta 1 unidad de la cuota diaria de 10.000; los
+   resultados se guardan 60 s por instancia y 30 s en la CDN.
+3. Los canales de YouTube (`youtube_channel`) se detectan por su feed público de
+   subidas: si el directo no aparece entre los 15 videos más recientes del feed,
+   se mostrará como “Offline”.
+
+El chat principal siempre es el de `vanderfondi` en Twitch. Si el stream elegido
+es de Twitch o un video de YouTube en vivo, su chat aparece como segunda pestaña.
+El chat embebido de Twitch, igual que su reproductor, exige HTTPS.
