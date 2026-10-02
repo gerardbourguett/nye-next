@@ -38,6 +38,11 @@ state text distinguishes the next and completed crossings without colored fills.
   hidden places when needed and marks the city with an emerald underline.
 - "Celebrating somewhere else?" sets the viewer's place for the marker and
   is remembered on this device; "Use my device's timezone" clears it.
+- "The map" sits between the overview and the crossing list: time-zone
+  regions in a muted fill, emerald once their midnight passes, ink for the
+  next crossing, an emerald outline for the viewer's midnight. Selecting a
+  region (pointer or keyboard) names its offset, headline city and midnight,
+  with a button to its row. Credit line for the public-domain source map.
 - Preview mode is a bordered notice with a way back to real time; the footer
   offers a 60× preview starting ten minutes before the first midnight.
 

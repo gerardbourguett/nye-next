@@ -29,6 +29,7 @@ import {
 } from "@/data/relay";
 import styles from "./relay-board.module.css";
 import { Countdown, PlaceFinder, type PlaceOption } from "./relay-controls";
+import { RelayMap } from "./relay-map";
 
 const VISIBLE_PLACES = 6;
 const TICK_MS = 30_000;
@@ -253,6 +254,15 @@ export function RelayBoard({
     } catch {
       // The choice still applies for this visit.
     }
+  };
+  const showPlace = (zoneName: string) => {
+    const entry = places.find((item) => item.zoneName === zoneName);
+    if (!entry) return;
+    setFound((current) => ({
+      zoneName,
+      offsetMinutes: entry.offsetMinutes,
+      seq: (current?.seq ?? 0) + 1,
+    }));
   };
   const advance = () => {
     if (anchor === null) return;
@@ -502,6 +512,17 @@ export function RelayBoard({
           </div>
         </section>
 
+        {bands.length > 0 && (
+          <RelayMap
+            bands={bands}
+            now={now}
+            year={year}
+            viewerOffset={viewerOffset}
+            nextOffset={nextBand?.offsetMinutes}
+            onShow={(band) => showPlace(band.headline.zoneName)}
+          />
+        )}
+
         <section className={styles.crossings} aria-labelledby="crossing-order">
           <div className={styles.sectionHeading}>
             <h2 id="crossing-order" tabIndex={-1}>
@@ -515,15 +536,7 @@ export function RelayBoard({
               options={placeOptions}
               label="Find a place"
               action="Show crossing"
-              onPick={(zoneName) => {
-                const entry = places.find((item) => item.zoneName === zoneName);
-                if (!entry) return;
-                setFound((current) => ({
-                  zoneName,
-                  offsetMinutes: entry.offsetMinutes,
-                  seq: (current?.seq ?? 0) + 1,
-                }));
-              }}
+              onPick={showPlace}
             />
           </div>
           <div className={styles.columnHeadings} aria-hidden="true">
