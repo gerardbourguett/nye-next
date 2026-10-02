@@ -16,6 +16,17 @@ const avatarCache = new Map<string, Cached<string | null>>();
 let twitchToken: Cached<string> | null = null;
 
 const fresh = <T>(entry: Cached<T> | undefined | null) => entry && entry.expires > Date.now() ? entry : undefined;
+const MAX_ENTRIES = 500;
+
+/** Drop expired entries, then the oldest, so per-instance caches stay bounded. */
+function prune<T>(cache: Map<string, Cached<T>>) {
+  const now = Date.now();
+  for (const [key, entry] of cache) if (entry.expires <= now) cache.delete(key);
+  for (const key of cache.keys()) {
+    if (cache.size <= MAX_ENTRIES) break;
+    cache.delete(key);
+  }
+}
 const chunks = <T>(items: T[], size: number) =>
   Array.from({ length: Math.ceil(items.length / size) }, (_, index) => items.slice(index * size, index * size + size));
 
@@ -49,11 +60,14 @@ async function twitchStatus(logins: string[]) {
       result.set(login, info);
     }
   }
+  // Avatars are decoration: a failed lookup must not discard confirmed status.
   const missing = logins.filter((login) => !fresh(avatarCache.get(login)));
   for (const batch of chunks(missing, 100)) {
-    const query = new URLSearchParams(batch.map((login) => ["login", login]));
-    const avatars = parseTwitchUsers(await getJson(`https://api.twitch.tv/helix/users?${query}`, { headers }));
-    for (const login of batch) avatarCache.set(login, { value: avatars.get(login) ?? null, expires: Date.now() + AVATAR_TTL });
+    try {
+      const query = new URLSearchParams(batch.map((login) => ["login", login]));
+      const avatars = parseTwitchUsers(await getJson(`https://api.twitch.tv/helix/users?${query}`, { headers }));
+      for (const login of batch) avatarCache.set(login, { value: avatars.get(login) ?? null, expires: Date.now() + AVATAR_TTL });
+    } catch { /* retried on the next status refresh */ }
   }
   return new Map(logins.map((login) => {
     const avatar = avatarCache.get(login)?.value ?? undefined;
@@ -89,6 +103,8 @@ async function youtubeChannel(channelId: string): Promise<LiveInfo | null> {
  * provider cannot answer (no credentials, an error) are left out entirely.
  */
 export async function liveStatus(options: readonly StreamOption[]): Promise<Record<string, LiveInfo>> {
+  prune(statusCache);
+  prune(avatarCache);
   const result: Record<string, LiveInfo> = {};
   const pending = options.filter((option) => {
     const cached = fresh(statusCache.get(optionKey(option)));

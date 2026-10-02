@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { cn } from "@/lib/utils";
 import {
@@ -12,6 +12,7 @@ import { cityFromZoneName } from "@/lib/zones";
 import styles from "@/components/streams/surface.module.css";
 
 export type LiveMap = Record<string, LiveInfo>;
+const TWITCH_CHAT_MIN_WIDTH = 350;
 export type Browser = { hostname: string; secure: boolean };
 
 export const localTime = (iso: string) => new Date(iso).toLocaleString(undefined, {
@@ -120,14 +121,22 @@ export function ChatPanel({ option, info, browser, dark }: {
   const sources: ChatSource[] = [{ key: `twitch:${MAIN_CHANNEL}`, label: MAIN_CHANNEL, channel: MAIN_CHANNEL }];
   if (option?.provider === "twitch" && option.id !== MAIN_CHANNEL) {
     sources.push({ key: optionKey(option), label: option.label, channel: option.id });
-  } else if (option && option.provider !== "twitch") {
-    const videoId = option.provider === "youtube" ? option.id : info?.live ? info.videoId : undefined;
-    if (videoId) sources.push({ key: optionKey(option), label: option.label, videoId });
+  } else if (option && option.provider !== "twitch" && info?.live && info.videoId) {
+    // YouTube chat exists only while YouTube confirms the video is live.
+    sources.push({ key: optionKey(option), label: option.label, videoId: info.videoId });
   }
   const [chosen, setChosen] = useState<string | null>(null);
   const [loaded, setLoaded] = useState<string | null>(null);
+  const [width, setWidth] = useState(0);
+  const body = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const observer = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width));
+    if (body.current) observer.observe(body.current);
+    return () => observer.disconnect();
+  }, []);
   const active = sources.find((item) => item.key === chosen) ?? sources[0];
-  const canEmbed = browser && (active.videoId || browser.secure);
+  // Twitch's embedded chat needs HTTPS and at least 350 px; narrower panels pop it out.
+  const canEmbed = browser && (active.videoId || (browser.secure && width >= TWITCH_CHAT_MIN_WIDTH));
   const url = browser && canEmbed
     ? active.channel ? twitchChatUrl(active.channel, browser.hostname, dark) : youtubeChatUrl(active.videoId!, browser.hostname)
     : null;
@@ -143,12 +152,13 @@ export function ChatPanel({ option, info, browser, dark }: {
           className={styles.chatTab} onClick={() => setChosen(item.key)}>{item.label}</button>)}
       </div>}
     </div>
-    <div className={styles.chatBody}>
+    <div className={styles.chatBody} ref={body}>
       {url && loaded === `${active.key}:${dark}`
         ? <iframe key={url} src={url} title={`${active.label} chat`} referrerPolicy="strict-origin-when-cross-origin" />
         : <div className={styles.playerMessage}>
           <p>{url ? `Load ${active.label}'s chat. Loading connects your browser to ${active.channel ? "Twitch" : "YouTube"}.`
-            : "Embedded Twitch chat needs HTTPS. Open it in a new window instead."}</p>
+            : browser && !browser.secure ? "Embedded Twitch chat needs HTTPS. Open it in a new window instead."
+              : "This space is narrower than Twitch chat needs. Open it in a new window instead."}</p>
           <div className={styles.actions} style={{ justifyContent: "center" }}>
             {url && <button type="button" className={cn(styles.button, styles.primary)}
               onClick={() => setLoaded(`${active.key}:${dark}`)}>Load chat</button>}
