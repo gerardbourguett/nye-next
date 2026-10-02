@@ -91,7 +91,13 @@ test("ustar rejects unsupported magic/prefix, duplicate members, invalid UTF-8 a
 
 test("stream bounds enforce bytes and timeout, including dishonest headers", async () => {
   await assert.rejects(readBounded(new Blob(["12345"]).stream(), 4, AbortSignal.timeout(1000)), /size_limit/);
-  await assert.rejects(readBounded(new ReadableStream({ start() {} }), 10, AbortSignal.timeout(20)), /timeout/i);
+  // Node unrefs AbortSignal.timeout timers; keep the loop alive until it fires.
+  const keepAlive = setTimeout(() => undefined, 1000);
+  try {
+    await assert.rejects(readBounded(new ReadableStream({ start() {} }), 10, AbortSignal.timeout(20)), /timeout/i);
+  } finally {
+    clearTimeout(keepAlive);
+  }
 });
 
 function upstream(body: Uint8Array, url = IANA_SOURCE, status = 200): typeof fetch {

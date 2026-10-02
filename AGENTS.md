@@ -20,10 +20,13 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 | Repository lint | `pnpm lint` |
 | Focused relay lint | `pnpm exec eslint app/road-to/page.tsx app/road-to/relay-board.tsx data/relay.ts` |
 | Generate route types, then typecheck | `pnpm exec next typegen && pnpm exec tsc --noEmit` |
+| End-to-end (Playwright, builds the app) | `pnpm test:e2e` |
 
 - `RootLayout` uses generated global `LayoutProps<"/">`; generate types before checking a fresh checkout. Do not hand-edit `next-env.d.ts` or `.next/` types.
 - ESLint uses Next core-web-vitals and TypeScript presets in `eslint.config.mjs`; lint is a separate script, not a substitute for typechecking.
 - Offline Node/tsx tests: `pnpm test:streams` and `pnpm test:timezones`; no formatter is configured. Mocked checks do not prove deployed Supabase RLS/Cron/Edge behavior; lint/typecheck are not behavioral tests.
+- `.github/workflows/ci.yml` runs on pull requests and `main`: lint, typegen + typecheck, both offline suites and a build without Supabase settings, then the E2E job.
+- E2E (`e2e/`, `playwright.config.ts`): a production build against `e2e/supabase-mock.ts`, a stand-in for the PostgREST/auth endpoints the public pages read, serving test-labelled slots from `e2e/fixtures.ts` relative to the current time. Provider credentials are blanked and Twitch/YouTube requests are answered locally; every test fails on console errors. Desktop and Pixel 7 projects, `America/Santiago` timezone. Locally, `E2E_CHROMIUM=<path>` uses a preinstalled browser instead of `playwright install`. It does not cover `/admin` (needs a Supabase session) or real provider APIs.
 - TypeScript is strict; `@/*` maps to the repository root, not `src/` (`tsconfig.json`).
 
 ## Routes and time semantics
