@@ -16,6 +16,13 @@ without leaving the running order. It is not a new visual identity.
   lineup, audience count, or availability is invented.
 - Twitch falls back to external viewing under its minimum width or without HTTPS;
   the page does not create an undersized embed or horizontal scrolling to fit it.
+- Twitch-like structure (not Twitch's colors): a left rail of this slot's
+  streams with avatars and status, then "Up next"; the player with an info bar
+  (avatar, stream title, live badge, viewers, uptime); a chat column; and
+  schedule cards. Tablet puts the rail under player and chat; mobile stacks.
+- `--stream-live` red is used only for provider-confirmed live status; without
+  provider credentials streams say "Scheduled". Avatars, live previews and
+  thumbnails load from provider image CDNs; players and chats load on click.
 - Visual/browser verification remains pending. Source inspection and local unit,
   lint, and type checks do not establish contrast or rendered layout compliance.
 
