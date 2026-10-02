@@ -8,6 +8,8 @@ const ZONE_NAME = /^[A-Za-z][A-Za-z0-9_+-]*(?:\/[A-Za-z0-9_+-]+){1,2}$/;
 // name once underscores become spaces.
 const CITY_NAME_OVERRIDES: Record<string, string> = {
   DumontDUrville: "Dumont d'Urville",
+  Sao_Paulo: "São Paulo",
+  St_Johns: "St. John's",
 };
 
 export function isZoneName(value: unknown): value is string {

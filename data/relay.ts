@@ -20,7 +20,42 @@ export type RelayBand = {
   /** ISO instant, in UTC, of this band's local midnight into the target year. */
   arrivalUtc: string;
   places: RelayPlace[];
+  /** The best-known place in the band, from HEADLINE_ZONES; else the first by city. */
+  headline: RelayPlace;
 };
+
+/**
+ * Widely recognised places, most prominent first: the first one present in a
+ * band is that crossing's headline. Matching is by IANA zone, never by offset,
+ * so DST at New Year can move a city between bands without a stale label.
+ * Order is editorial; it ranks familiarity, not population figures.
+ */
+const HEADLINE_ZONES = [
+  "Asia/Tokyo", "Asia/Shanghai", "Asia/Kolkata", "America/New_York", "Europe/London",
+  "Europe/Paris", "America/Sao_Paulo", "America/Mexico_City", "Asia/Dubai", "Europe/Moscow",
+  "Australia/Sydney", "Pacific/Auckland", "America/Los_Angeles", "America/Chicago",
+  "America/Denver", "Asia/Seoul", "Asia/Bangkok", "Asia/Jakarta", "Asia/Karachi",
+  "Asia/Dhaka", "Asia/Tehran", "Asia/Kabul", "Asia/Kathmandu", "Asia/Yangon", "Africa/Cairo",
+  "Africa/Lagos", "Africa/Johannesburg", "Africa/Nairobi", "Europe/Istanbul",
+  "America/Argentina/Buenos_Aires", "America/Santiago", "America/Bogota", "America/Caracas",
+  "America/Halifax", "America/St_Johns", "America/Anchorage", "Pacific/Honolulu",
+  "Pacific/Tongatapu", "Pacific/Kiritimati", "Pacific/Chatham", "Australia/Adelaide",
+  "Australia/Brisbane", "Australia/Darwin", "Australia/Perth", "Australia/Eucla",
+  "Pacific/Fiji", "Pacific/Noumea", "Asia/Vladivostok", "Asia/Kamchatka", "Atlantic/Azores",
+  "Atlantic/Cape_Verde", "America/Noronha", "Atlantic/South_Georgia", "Pacific/Pago_Pago",
+  "Pacific/Niue", "Pacific/Marquesas", "Pacific/Gambier", "Pacific/Pitcairn",
+];
+const HEADLINE_RANK = new Map(HEADLINE_ZONES.map((zone, rank) => [zone, rank]));
+
+function headlineOf(places: readonly RelayPlace[]): RelayPlace {
+  let best = places[0];
+  let bestRank = Infinity;
+  for (const place of places) {
+    const rank = HEADLINE_RANK.get(place.zoneName) ?? Infinity;
+    if (rank < bestRank) [best, bestRank] = [place, rank];
+  }
+  return best;
+}
 
 /**
  * The UTC offset a zone actually observes at a given instant. Derived from
@@ -127,10 +162,14 @@ export function getRelayBands(
 
   return [...byOffset.entries()]
     .sort(([a], [b]) => b - a)
-    .map(([offsetMinutes, { arrivalUtcMs, places }]) => ({
-      offsetMinutes,
-      offsetLabel: formatOffsetLabel(offsetMinutes),
-      arrivalUtc: new Date(arrivalUtcMs).toISOString(),
-      places: places.sort((a, b) => a.city.localeCompare(b.city)),
-    }));
+    .map(([offsetMinutes, { arrivalUtcMs, places }]) => {
+      places.sort((a, b) => a.city.localeCompare(b.city));
+      return {
+        offsetMinutes,
+        offsetLabel: formatOffsetLabel(offsetMinutes),
+        arrivalUtc: new Date(arrivalUtcMs).toISOString(),
+        places,
+        headline: headlineOf(places),
+      };
+    });
 }

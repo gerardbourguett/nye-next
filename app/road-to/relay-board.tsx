@@ -11,10 +11,11 @@ import {
   LocateFixed,
   Play,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { cn } from "@/lib/utils";
 import { editionTag, editionYear } from "@/lib/edition";
+import { readClock, simulationHref, type Simulation } from "@/lib/relay-clock";
 import { providerName } from "@/lib/streams/domain";
 import {
   watchHref,
@@ -27,9 +28,13 @@ import {
   type RelayPlace,
 } from "@/data/relay";
 import styles from "./relay-board.module.css";
+import { Countdown, PlaceFinder, type PlaceOption } from "./relay-controls";
 
 const VISIBLE_PLACES = 6;
 const TICK_MS = 30_000;
+const PLACE_KEY = "relay:place";
+const PLACES_LIST_ID = "relay-places";
+const PREVIEW_SPEED = 60;
 
 type Viewer = { offsetMinutes: number } | null;
 
@@ -96,6 +101,24 @@ function BandStreams({
   );
 }
 
+/** Headline first, then the rest by city, as the row lists them. */
+function orderedPlaces(band: RelayBand) {
+  return [band.headline, ...band.places.filter((place) => place !== band.headline)];
+}
+
+function PlaceNames({ places, found }: { places: RelayPlace[]; found: string | null }) {
+  return places.map((place, index) => (
+    <span key={place.zoneName}>
+      {index > 0 && ", "}
+      {place.zoneName === found ? (
+        <strong className={styles.foundPlace}>{place.city}</strong>
+      ) : (
+        place.city
+      )}
+    </span>
+  ));
+}
+
 function formatArrivalLocal(iso: string) {
   return new Date(iso).toLocaleString(undefined, {
     month: "short",
@@ -109,18 +132,51 @@ export function RelayBoard({
   bands,
   year,
   streams,
+  simulation,
 }: {
   bands: RelayBand[];
   year: number;
   /** Published programming per crossing, keyed by offset minutes. */
   streams: CrossingStreams;
+  /** Preview mode from `?at=&speed=`; null follows the real clock. */
+  simulation: Simulation | null;
 }) {
   const router = useRouter();
-  // Both stay null until mounted, so the server render and the first client
+  // All stay null until mounted, so the server render and the first client
   // render agree — the viewer's own zone and "now" only exist in the browser.
   const [now, setNow] = useState<number | null>(null);
+  const [anchor, setAnchor] = useState<number | null>(null);
   const [viewer, setViewer] = useState<Viewer>(null);
+  const [chosenZone, setChosenZone] = useState<string | null>(null);
+  const [found, setFound] = useState<
+    { zoneName: string; offsetMinutes: number; seq: number } | null
+  >(null);
   const requestedEdition = useRef(year);
+  const simAt = simulation?.at ?? null;
+  const simSpeed = simulation?.speed ?? 1;
+
+  const places = useMemo(() => {
+    const entries = bands.flatMap((band) =>
+      band.places.map((place) => ({ place, offsetMinutes: band.offsetMinutes })),
+    );
+    const counts = new Map<string, number>();
+    for (const { place } of entries) {
+      const label = `${place.city}, ${place.countryName}`;
+      counts.set(label, (counts.get(label) ?? 0) + 1);
+    }
+    return entries.map((entry) => {
+      const label = `${entry.place.city}, ${entry.place.countryName}`;
+      return {
+        ...entry,
+        zoneName: entry.place.zoneName,
+        label: (counts.get(label) ?? 0) > 1 ? `${label} (${entry.place.zoneName})` : label,
+      };
+    });
+  }, [bands]);
+  const placeOptions: PlaceOption[] = useMemo(
+    () => [...places].sort((a, b) => a.label.localeCompare(b.label)),
+    [places],
+  );
 
   useEffect(() => {
     const refresh = () => {
@@ -148,11 +204,56 @@ export function RelayBoard({
   }, [year]);
 
   useEffect(() => {
-    const tick = () => setNow(Date.now());
-    tick();
-    const interval = setInterval(tick, TICK_MS);
-    return () => clearInterval(interval);
+    const restore = () => {
+      try {
+        setChosenZone(window.localStorage.getItem(PLACE_KEY));
+      } catch {
+        // Storage can be blocked; the device timezone still works.
+      }
+    };
+    restore();
   }, []);
+
+  // A new simulation (or none) restarts the clock from this moment.
+  useEffect(() => {
+    const start = () => setAnchor(Date.now());
+    start();
+  }, [simAt, simSpeed]);
+
+  useEffect(() => {
+    if (anchor === null) return;
+    const clock = simAt === null ? null : { at: simAt, speed: simSpeed };
+    const tick = () => setNow(readClock(clock, anchor, Date.now()));
+    tick();
+    // Fast previews tick every second so crossings keep up with the clock.
+    const interval = setInterval(tick, clock && clock.speed > 1 ? 1_000 : TICK_MS);
+    return () => clearInterval(interval);
+  }, [anchor, simAt, simSpeed]);
+
+  // Bring a found place into view once its row has rendered. Keyed on the
+  // search itself, so catalog refreshes never scroll back to an old result.
+  useEffect(() => {
+    if (!found) return;
+    const row = document.getElementById(`crossing-${found.offsetMinutes}`);
+    if (!row) return;
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    row.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "start" });
+    row.focus({ preventScroll: true });
+  }, [found]);
+
+  const choosePlace = (zoneName: string | null) => {
+    setChosenZone(zoneName);
+    try {
+      if (zoneName) window.localStorage.setItem(PLACE_KEY, zoneName);
+      else window.localStorage.removeItem(PLACE_KEY);
+    } catch {
+      // The choice still applies for this visit.
+    }
+  };
+  const advance = () => {
+    if (anchor === null) return;
+    setNow(readClock(simAt === null ? null : { at: simAt, speed: simSpeed }, anchor, Date.now()));
+  };
 
   // Once the wave is over the server serves the next edition; fetch it
   // promptly instead of waiting for the five-minute catalog refresh. One
@@ -162,9 +263,12 @@ export function RelayBoard({
     const current = editionYear(now);
     if (current !== year && current !== requestedEdition.current) {
       requestedEdition.current = current;
-      router.refresh();
+      // The server derives a preview's edition from `at`, so a preview moves
+      // on by restarting from the current simulated instant instead.
+      if (simAt !== null) router.replace(simulationHref(now, simSpeed), { scroll: false });
+      else router.refresh();
     }
-  }, [now, year, router]);
+  }, [now, year, router, simAt, simSpeed]);
 
   const crossedCount =
     now === null
@@ -172,9 +276,10 @@ export function RelayBoard({
       : bands.filter((band) => new Date(band.arrivalUtc).getTime() <= now).length;
   const percent = bands.length > 0 ? (crossedCount / bands.length) * 100 : 0;
   const nextBand = now === null ? undefined : bands[crossedCount];
-  const viewerBand = bands.find(
-    (band) => band.offsetMinutes === viewer?.offsetMinutes,
-  );
+  // A chosen place overrides the device timezone; a stale choice is ignored.
+  const chosen = places.find((item) => item.zoneName === chosenZone);
+  const viewerOffset = chosen?.offsetMinutes ?? viewer?.offsetMinutes;
+  const viewerBand = bands.find((band) => band.offsetMinutes === viewerOffset);
   const complete =
     now !== null && bands.length > 0 && crossedCount === bands.length;
   // Only a stream that has not ended: a past slot's link would be discarded.
@@ -190,8 +295,34 @@ export function RelayBoard({
       <a href="#crossing-order" className={styles.skipLink}>
         Skip to crossing order
       </a>
+      <datalist id={PLACES_LIST_ID}>
+        {placeOptions.map((option) => (
+          <option key={option.zoneName} value={option.label} />
+        ))}
+      </datalist>
       <header className={styles.masthead}>
         <div className={styles.container}>
+          {simulation && (
+            <div className={styles.simulation}>
+              {/* Only the static notice is a live region; the ticking clock
+                  beside it would otherwise be re-announced every second. */}
+              <p role="status">
+                <strong>Preview</strong>: simulated time
+                {simulation.speed > 1 && ` at ${simulation.speed}× speed`}.
+                Nothing here is live.
+              </p>
+              <p>
+                {now !== null && (
+                  <time dateTime={new Date(now).toISOString()}>
+                    {formatArrivalLocal(new Date(now).toISOString())}
+                  </time>
+                )}{" "}
+                <Link href="/road-to" className={styles.textLink}>
+                  Back to real time
+                </Link>
+              </p>
+            </div>
+          )}
           <nav className={styles.navigation} aria-label="Relay navigation">
             <Link href="/" className={styles.brand}>
               <ArrowLeft size={18} aria-hidden="true" /> {editionTag(year)}
@@ -256,9 +387,18 @@ export function RelayBoard({
               <p className={styles.nextPlace}>
                 {complete
                   ? `Every listed timezone is in ${year}.`
-                  : (nextBand ?? bands[0])?.places[0]?.city ??
+                  : (nextBand ?? bands[0])?.headline.city ??
                     "No crossings available"}
               </p>
+              {nextBand && anchor !== null && (
+                <Countdown
+                  target={Date.parse(nextBand.arrivalUtc)}
+                  simulation={simulation}
+                  anchor={anchor}
+                  label={`Time until midnight in ${nextBand.headline.city}`}
+                  onArrive={advance}
+                />
+              )}
               {nextBand && (
                 <a
                   className={styles.textLink}
@@ -303,6 +443,7 @@ export function RelayBoard({
                   className={styles.viewerLink}
                   href={`#crossing-${viewerBand.offsetMinutes}`}
                 >
+                  {chosen ? `${chosen.place.city} · ` : ""}
                   {viewerBand.offsetLabel} <ArrowDown size={18} aria-hidden="true" />
                 </a>
                 <p className={styles.overviewNote}>
@@ -310,14 +451,49 @@ export function RelayBoard({
                     {formatArrivalLocal(viewerBand.arrivalUtc)}
                   </time>{" "}
                   your time
+                  {anchor !== null && Date.parse(viewerBand.arrivalUtc) > now && (
+                    <>
+                      <span aria-hidden="true"> · </span>
+                      <Countdown
+                        target={Date.parse(viewerBand.arrivalUtc)}
+                        simulation={simulation}
+                        anchor={anchor}
+                        label="Time until your midnight"
+                        onArrive={advance}
+                      />
+                    </>
+                  )}
+                </p>
+                <p className={styles.overviewNote}>
+                  {chosen ? "Your chosen place." : "From your device's timezone."}
                 </p>
               </>
             ) : (
               <p className={styles.overviewNote}>
                 {now === null
                   ? "Finding your timezone…"
-                  : "Your timezone could not be matched. Browse the UTC offsets below."}
+                  : "Your timezone could not be matched. Choose your place below."}
               </p>
+            )}
+            {now !== null && (
+              <>
+                <PlaceFinder
+                  listId={PLACES_LIST_ID}
+                  options={placeOptions}
+                  label="Celebrating somewhere else?"
+                  action="Set my place"
+                  onPick={choosePlace}
+                />
+                {chosen && (
+                  <button
+                    type="button"
+                    className={styles.textButton}
+                    onClick={() => choosePlace(null)}
+                  >
+                    Use my device&rsquo;s timezone
+                  </button>
+                )}
+              </>
             )}
           </div>
         </section>
@@ -328,6 +504,23 @@ export function RelayBoard({
               Crossing order
             </h2>
             <p>First to last. Arrival times are yours.</p>
+          </div>
+          <div className={styles.findBar}>
+            <PlaceFinder
+              listId={PLACES_LIST_ID}
+              options={placeOptions}
+              label="Find a place"
+              action="Show crossing"
+              onPick={(zoneName) => {
+                const entry = places.find((item) => item.zoneName === zoneName);
+                if (!entry) return;
+                setFound((current) => ({
+                  zoneName,
+                  offsetMinutes: entry.offsetMinutes,
+                  seq: (current?.seq ?? 0) + 1,
+                }));
+              }}
+            />
           </div>
           <div className={styles.columnHeadings} aria-hidden="true">
             <span>Crossing / UTC offset</span>
@@ -341,12 +534,14 @@ export function RelayBoard({
             {bands.map((band, index) => {
               const crossed =
                 now !== null && new Date(band.arrivalUtc).getTime() <= now;
-              const isViewer =
-                viewer !== null && viewer.offsetMinutes === band.offsetMinutes;
+              const isViewer = viewerOffset === band.offsetMinutes;
               const isNext = nextBand?.offsetMinutes === band.offsetMinutes;
               const countries = distinctCountries(band.places);
-              const visible = band.places.slice(0, VISIBLE_PLACES);
-              const rest = band.places.slice(VISIBLE_PLACES);
+              const ordered = orderedPlaces(band);
+              const visible = ordered.slice(0, VISIBLE_PLACES);
+              const rest = ordered.slice(VISIBLE_PLACES);
+              const foundZone = found?.zoneName ?? null;
+              const foundInRest = rest.some((place) => place.zoneName === foundZone);
               const bandStreams = streams[band.offsetMinutes];
 
               return (
@@ -379,10 +574,13 @@ export function RelayBoard({
                     {isViewer && (
                       <p className={styles.viewerMarker}>
                         <LocateFixed size={14} aria-hidden="true" /> You are here
+                        {chosen && chosen.offsetMinutes === band.offsetMinutes
+                          ? ` · ${chosen.place.city}`
+                          : ""}
                       </p>
                     )}
                     <p className={styles.cityNames}>
-                      {visible.map((place) => place.city).join(", ")}
+                      <PlaceNames places={visible} found={foundZone} />
                     </p>
                     <div className={styles.placeMeta}>
                       <div className={styles.flags}>
@@ -406,14 +604,21 @@ export function RelayBoard({
                       </span>
                     </div>
                     {rest.length > 0 && (
-                      <details className={styles.morePlaces}>
+                      <details
+                        // Remount open when a search lands on a hidden place.
+                        key={foundInRest ? `found-${found?.seq}` : "closed"}
+                        className={styles.morePlaces}
+                        open={foundInRest || undefined}
+                      >
                         <summary>
                           <span className={styles.showMore}>
                             Show {rest.length} more places
                           </span>
                           <span className={styles.showLess}>Show fewer places</span>
                         </summary>
-                        <p>{rest.map((place) => place.city).join(", ")}</p>
+                        <p>
+                          <PlaceNames places={rest} found={foundZone} />
+                        </p>
                       </details>
                     )}
                     {bandStreams && <BandStreams list={bandStreams} now={now} />}
@@ -443,6 +648,23 @@ export function RelayBoard({
             One crossing per UTC offset at New Year, including half- and
             quarter-hour offsets. Your marker follows your offset, not a city.
           </p>
+          {simulation ? (
+            <Link className={styles.textLink} href="/road-to">
+              Back to real time
+            </Link>
+          ) : (
+            bands.length > 0 && (
+              <Link
+                className={styles.textLink}
+                href={simulationHref(
+                  Date.parse(bands[0].arrivalUtc) - 10 * 60_000,
+                  PREVIEW_SPEED,
+                )}
+              >
+                Preview the night at {PREVIEW_SPEED}× speed
+              </Link>
+            )
+          )}
           <a className={styles.textLink} href="#relay-top">
             Back to top <ArrowUp size={16} aria-hidden="true" />
           </a>

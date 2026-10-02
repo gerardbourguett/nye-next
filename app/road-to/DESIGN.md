@@ -30,6 +30,17 @@ state text distinguishes the next and completed crossings without colored fills.
 | Motion | 200ms progress transform and crossing color transitions; disabled for reduced motion |
 | Navigation | Home, real Twitch channel, next crossing, viewer crossing, skip link, and back to top |
 
+## Interaction
+
+- The next crossing and the viewer's midnight each show a per-second countdown
+  (`role="timer"`, not announced). Each crossing leads with a familiar city.
+- "Find a place" (native datalist) scrolls to the crossing, focuses it, opens
+  hidden places when needed and marks the city with an emerald underline.
+- "Celebrating somewhere else?" sets the viewer's place for the marker and
+  is remembered on this device; "Use my device's timezone" clears it.
+- Preview mode is a bordered notice with a way back to real time; the footer
+  offers a 60× preview starting ten minutes before the first midnight.
+
 ## Behavioral boundaries
 
 - Server-provided bands remain ordered and unfiltered. Every city, country
