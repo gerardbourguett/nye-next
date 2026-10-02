@@ -515,6 +515,10 @@
   line-height: 1.7;
 }
 
+.simulation p {
+  margin: 0;
+}
+
 .simulation {
   margin: 0 0 1.25rem;
   border: 1px solid var(--relay-line);

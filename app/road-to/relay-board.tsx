@@ -148,7 +148,9 @@ export function RelayBoard({
   const [anchor, setAnchor] = useState<number | null>(null);
   const [viewer, setViewer] = useState<Viewer>(null);
   const [chosenZone, setChosenZone] = useState<string | null>(null);
-  const [found, setFound] = useState<{ zoneName: string; seq: number } | null>(null);
+  const [found, setFound] = useState<
+    { zoneName: string; offsetMinutes: number; seq: number } | null
+  >(null);
   const requestedEdition = useRef(year);
   const simAt = simulation?.at ?? null;
   const simSpeed = simulation?.speed ?? 1;
@@ -228,16 +230,16 @@ export function RelayBoard({
     return () => clearInterval(interval);
   }, [anchor, simAt, simSpeed]);
 
-  // Bring a found place into view once its row has rendered.
+  // Bring a found place into view once its row has rendered. Keyed on the
+  // search itself, so catalog refreshes never scroll back to an old result.
   useEffect(() => {
     if (!found) return;
-    const entry = places.find((item) => item.zoneName === found.zoneName);
-    const row = entry && document.getElementById(`crossing-${entry.offsetMinutes}`);
+    const row = document.getElementById(`crossing-${found.offsetMinutes}`);
     if (!row) return;
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     row.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "start" });
     row.focus({ preventScroll: true });
-  }, [found, places]);
+  }, [found]);
 
   const choosePlace = (zoneName: string | null) => {
     setChosenZone(zoneName);
@@ -261,9 +263,12 @@ export function RelayBoard({
     const current = editionYear(now);
     if (current !== year && current !== requestedEdition.current) {
       requestedEdition.current = current;
-      router.refresh();
+      // The server derives a preview's edition from `at`, so a preview moves
+      // on by restarting from the current simulated instant instead.
+      if (simAt !== null) router.replace(simulationHref(now, simSpeed), { scroll: false });
+      else router.refresh();
     }
-  }, [now, year, router]);
+  }, [now, year, router, simAt, simSpeed]);
 
   const crossedCount =
     now === null
@@ -298,22 +303,25 @@ export function RelayBoard({
       <header className={styles.masthead}>
         <div className={styles.container}>
           {simulation && (
-            <p className={styles.simulation} role="status">
-              <strong>Preview</strong>: simulated time
-              {now !== null && (
-                <>
-                  {" "}
+            <div className={styles.simulation}>
+              {/* Only the static notice is a live region; the ticking clock
+                  beside it would otherwise be re-announced every second. */}
+              <p role="status">
+                <strong>Preview</strong>: simulated time
+                {simulation.speed > 1 && ` at ${simulation.speed}× speed`}.
+                Nothing here is live.
+              </p>
+              <p>
+                {now !== null && (
                   <time dateTime={new Date(now).toISOString()}>
                     {formatArrivalLocal(new Date(now).toISOString())}
                   </time>
-                </>
-              )}
-              {simulation.speed > 1 && ` at ${simulation.speed}× speed`}. Nothing
-              here is live.{" "}
-              <Link href="/road-to" className={styles.textLink}>
-                Back to real time
-              </Link>
-            </p>
+                )}{" "}
+                <Link href="/road-to" className={styles.textLink}>
+                  Back to real time
+                </Link>
+              </p>
+            </div>
           )}
           <nav className={styles.navigation} aria-label="Relay navigation">
             <Link href="/" className={styles.brand}>
@@ -503,9 +511,15 @@ export function RelayBoard({
               options={placeOptions}
               label="Find a place"
               action="Show crossing"
-              onPick={(zoneName) =>
-                setFound((current) => ({ zoneName, seq: (current?.seq ?? 0) + 1 }))
-              }
+              onPick={(zoneName) => {
+                const entry = places.find((item) => item.zoneName === zoneName);
+                if (!entry) return;
+                setFound((current) => ({
+                  zoneName,
+                  offsetMinutes: entry.offsetMinutes,
+                  seq: (current?.seq ?? 0) + 1,
+                }));
+              }}
             />
           </div>
           <div className={styles.columnHeadings} aria-hidden="true">
