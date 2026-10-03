@@ -62,14 +62,15 @@ function once(url: URL, signal: AbortSignal, maxBytes: number): Promise<Response
  * on every redirect and at connection time), at most three redirects are
  * followed, the body is capped, and the whole read has one deadline.
  */
-export async function fetchPublicText(input: string, timeoutMs: number, maxBytes = MAX_BYTES): Promise<{ status: number; text: string }> {
+export async function fetchPublicText(input: string, timeoutMs: number, maxBytes = MAX_BYTES): Promise<{ status: number; text: string; url: string }> {
   const signal = AbortSignal.timeout(timeoutMs);
   let url = input;
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
     const target = new URL(url);
     if (!isPublicHttpsUrl(target)) throw new Error("Refused: not a public HTTPS address");
     const response = await once(target, signal, maxBytes);
-    if (response.status < 300 || response.status >= 400) return { status: response.status, text: response.text };
+    // `url` is where the text really came from: relative references inside it resolve against that, not the first address.
+    if (response.status < 300 || response.status >= 400) return { status: response.status, text: response.text, url };
     if (!response.location) throw new Error("Redirect without a location");
     url = new URL(response.location, url).href;
   }

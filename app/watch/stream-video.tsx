@@ -23,7 +23,13 @@ export function StreamVideo({ kind, url, label }: { kind: "hls" | "dash"; url: s
     if (!element) return;
     let disposed = false;
     let destroy = () => {};
-    const fail = () => { if (!disposed) setFailed(true); };
+    // Entering the failure view also releases the player (requests, timers, media attachment).
+    const fail = () => {
+      if (disposed) return;
+      destroy();
+      destroy = () => {};
+      setFailed(true);
+    };
 
     async function start(target: HTMLVideoElement) {
       try {
@@ -44,8 +50,11 @@ export function StreamVideo({ kind, url, label }: { kind: "hls" | "dash"; url: s
           const { MediaPlayer } = await import("dashjs");
           if (disposed) return;
           const player = MediaPlayer().create();
-          // Errors after playback began (a missed segment) are the player's to retry.
-          player.on(MediaPlayer.events.ERROR, () => { if (target.readyState === 0) fail(); });
+          // Errors after playback became possible (a missed segment) are the player's to retry; before
+          // the first frame there is nothing to retry into, even if metadata (readyState 1) has loaded.
+          let playable = false;
+          target.addEventListener("loadeddata", () => { playable = true; }, { once: true });
+          player.on(MediaPlayer.events.ERROR, () => { if (!playable) fail(); });
           player.initialize(target, url, false);
           destroy = () => player.destroy();
         }

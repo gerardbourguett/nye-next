@@ -222,7 +222,7 @@ test("deep links only select well-formed slot and stream pairs", () => {
   }
 });
 
-import { isUrlProvider, normalizeStreamUrl, streamHost } from "../../lib/streams/domain";
+import { capLiveKeys, isUrlProvider, normalizeStreamUrl, streamHost } from "../../lib/streams/domain";
 
 // The same cases run against the SQL backstop in 202610040001_url_stream_sources.sql.
 const URL_CASES: [provider: "hls" | "dash" | "link", id: string, ok: boolean][] = [
@@ -247,6 +247,7 @@ const URL_CASES: [provider: "hls" | "dash" | "link", id: string, ok: boolean][] 
   ["hls", "https://cdn.example.com/it's.m3u8", false],
   ["hls", "https://[::1]/index.m3u8", false],
   ["hls", "https://singlelabel/index.m3u8", false],
+  ["hls", "https://cdn.example.com./live/index.m3u8", false],
   ["dash", "https://cdn.example.com/live/manifest.mpd", true],
   ["dash", "https://cdn.example.com/live/manifest.m3u8", false],
   ["link", "https://www.example.com/watch/live", true],
@@ -292,4 +293,19 @@ test("URL options validate, deduplicate, resolve addresses and survive deep link
   assert.equal(roundTrip, key);
   assert.equal(parseSelection(slot.id, "hls:https://127.0.0.1/a.m3u8"), null);
   assert.equal(key.includes(","), false, "keys stay safe in comma-separated status requests");
+});
+
+test("status keys are capped by count and by their percent-encoded length", () => {
+  assert.deepEqual(capLiveKeys(["twitch:a", "twitch:b"]), ["twitch:a", "twitch:b"]);
+  assert.equal(capLiveKeys(Array.from({ length: 40 }, (_, index) => `twitch:c${index}`)).length, 24);
+  // Signed URLs expand a lot when encoded: ':' '/' '?' '=' '&' each become three characters.
+  const signed = (index: number) => `hls:https://cdn.example.com/live/${index}/index.m3u8?token=${"a=b&".repeat(60)}`;
+  const kept = capLiveKeys(Array.from({ length: 24 }, (_, index) => signed(index)));
+  const wire = new URLSearchParams({ keys: kept.join(",") }).toString();
+  assert.ok(wire.length <= 6_005, `encoded query is ${wire.length} characters`);
+  assert.ok(kept.length < 24, "the encoded length, not the raw one, limits the list");
+  // The raw characters alone would have fit the old 6,000-character cap for 20 of these keys.
+  assert.ok(Array.from({ length: 20 }, (_, index) => signed(index)).join(",").length <= 6_000);
+  // An oversized key is skipped, not allowed to block the smaller ones after it.
+  assert.deepEqual(capLiveKeys(["twitch:a", `hls:https://cdn.example.com/${"/".repeat(2_500)}`, "twitch:b"]), ["twitch:a", "twitch:b"]);
 });

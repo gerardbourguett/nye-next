@@ -76,6 +76,10 @@ export function isPublicAddress(address: string): boolean {
   if (g.slice(0, 5).every((group) => group === 0) && g[5] === 0xffff) return embedded(g[6], g[7]); // IPv4-mapped
   if (g[0] === 0x64 && g[1] === 0xff9b) return embedded(g[6], g[7]); // NAT64
   if (g[0] === 0x2002) return embedded(g[1], g[2]); // 6to4
+  // Only global unicast (2000::/3) is public; everything else (site-local fec0::/10, unassigned space…) is refused.
+  if ((g[0] & 0xe000) !== 0x2000) return false;
+  if (g[0] === 0x2001 && (g[1] === 0x0000 || g[1] === 0x0002 || (g[1] & 0xfff0) === 0x0010 || (g[1] & 0xfff0) === 0x0020)) return false; // Teredo, benchmarking, ORCHID
+  if (g[0] === 0x3fff && (g[1] & 0xf000) === 0) return false; // documentation (3fff::/20)
   return true;
 }
 

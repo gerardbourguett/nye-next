@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTheme } from "next-themes";
-import { activeSlot, decodeSlots, embedUrl, HOUR_MS, MAIN_CHANNEL, optionKey, providerName, providerUrl, reconcilePlayback,
+import { activeSlot, capLiveKeys, decodeSlots, embedUrl, HOUR_MS, MAIN_CHANNEL, optionKey, providerName, providerUrl, reconcilePlayback,
   selectedOption, streamHost, type PlaybackState, type Slot, type StreamOption } from "@/lib/streams/domain";
 import { cn } from "@/lib/utils";
 import styles from "@/components/streams/surface.module.css";
@@ -12,8 +12,6 @@ import { StreamVideo } from "./stream-video";
 /** `askedFor` is the deep-linked slot id this snapshot was fetched with, if any. */
 type Snapshot = { slots: Slot[]; serverNow: number; receivedAt: number; askedFor: string | null };
 const LIVE_POLL_MS = 60_000;
-/** Stream addresses are keys too, so one status request stays well inside URL limits. */
-const MAX_LIVE_KEY_CHARS = 6_000;
 
 type Selection = NonNullable<PlaybackState["selection"]>;
 
@@ -133,14 +131,8 @@ export function ViewingRoom({ requested: initialRequest = null }: { requested?: 
     for (const stream of item.options) liveKeySet.add(optionKey(stream));
   }
   // Capped in priority order (main channel, this slot, then cards) before sorting.
-  const prioritized: string[] = [];
-  let keyChars = 0;
-  for (const key of liveKeySet) {
-    if (prioritized.length >= 24 || keyChars + key.length + 1 > MAX_LIVE_KEY_CHARS) break;
-    prioritized.push(key);
-    keyChars += key.length + 1;
-  }
-  const liveKeys = prioritized.sort().join(",");
+  // Stream addresses are keys too, so the cap counts their percent-encoded length.
+  const liveKeys = capLiveKeys(liveKeySet).sort().join(",");
   useEffect(() => {
     const controller = new AbortController();
     const load = async () => {

@@ -53,10 +53,31 @@ export function normalizeStreamUrl(provider: UrlProvider, input: string): string
   if (input.length > MAX_STREAM_URL || !URL_CHARS.test(input)) return null;
   let url: URL;
   try { url = new URL(input); } catch { return null; }
-  if (url.hash || !isPublicHttpsUrl(url)) return null;
+  // A trailing dot names the same host but is refused so the SQL backstop and this check agree.
+  if (url.hash || url.hostname.endsWith(".") || !isPublicHttpsUrl(url)) return null;
   const extension = URL_EXTENSION[provider];
   if (extension && !extension.test(url.pathname)) return null;
   return url.href.length <= MAX_STREAM_URL ? url.href : null;
+}
+
+const queryLength = (text: string) => new URLSearchParams({ k: text }).toString().length - 2;
+
+/**
+ * Status-request keys in priority order, capped by count and by their
+ * percent-encoded length in the query string (what a server's request-line
+ * limit sees). A key too long for what is left is skipped; later ones may fit.
+ */
+export function capLiveKeys(keys: Iterable<string>, maxKeys = 24, maxEncoded = 6_000): string[] {
+  const kept: string[] = [];
+  let size = 0;
+  for (const key of keys) {
+    const cost = queryLength(key) + 3; // the encoded comma between keys
+    if (kept.length >= maxKeys) break;
+    if (size + cost > maxEncoded) continue;
+    kept.push(key);
+    size += cost;
+  }
+  return kept;
 }
 
 export function validProviderId(provider: unknown, id: unknown): boolean {

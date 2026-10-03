@@ -108,13 +108,13 @@ async function youtubeChannel(channelId: string): Promise<LiveInfo | null> {
 async function playlistStatus(option: StreamOption): Promise<LiveInfo | null> {
   let url = option.id;
   for (let hop = 0; hop < 2; hop++) {
-    const { status, text } = await fetchPublicText(url, TIMEOUT);
+    const { status, text, url: finalUrl } = await fetchPublicText(url, TIMEOUT);
     if (status === 404 || status === 410) return { live: false };
     if (status !== 200) return null;
     const reading = option.provider === "hls" ? readHlsPlaylist(text) : readMpd(text);
     if (reading.state === "live") return { live: true };
     if (reading.state !== "master") return null;
-    url = new URL(reading.variant, url).href;
+    url = new URL(reading.variant, finalUrl).href;
   }
   return null;
 }

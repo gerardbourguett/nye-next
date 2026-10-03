@@ -123,7 +123,7 @@ export async function loadChannelList(form: FormData): Promise<ChannelListResult
       const response = await fetchPublicText(input, 10_000, LIST_BYTES);
       if (response.status !== 200) return { ok: false, message: `The list's server answered ${response.status}. Check the address, or paste the list instead.` };
       text = response.text;
-      base = input;
+      base = response.url; // after any redirects: relative entries resolve against where the list really lives
     } catch {
       return { ok: false, message: "The list could not be read. It must be a public HTTPS address under 8 MB; otherwise paste its text instead." };
     }
