@@ -15,9 +15,11 @@ const SIGNED = /[?&](?:token|key|pass(?:word)?|auth|sig(?:nature)?|hdnts|hdnea|e
  * form (forms cannot nest); choosing an entry fills one option of the slot.
  * The list itself is never saved, only what is chosen.
  */
-export function ChannelImport({ optionCount, onUse }: {
+export function ChannelImport({ optionCount, onUse, disabled = false }: {
   optionCount: number;
   onUse: (index: number, channel: ListedChannel) => void;
+  /** While the slot is being saved the options must not change under the form data already sent. */
+  disabled?: boolean;
 }) {
   const id = useId();
   const [input, setInput] = useState("");
@@ -35,7 +37,8 @@ export function ChannelImport({ optionCount, onUse }: {
 
   return <details className={styles.optionEditor}>
     <summary>Pick channels from a list (.m3u)</summary>
-    <div className={styles.fields}>
+    <fieldset disabled={disabled} className={styles.fields}>
+      <legend className="sr-only">Channel list</legend>
       <div className={styles.field}><label htmlFor={`${id}-list`}>List address or pasted text</label>
         <textarea id={`${id}-list`} rows={3} value={input} onChange={(event) => setInput(event.target.value)} maxLength={900_000}
           placeholder="https://example.com/channels.m3u  or  #EXTM3U …" spellCheck={false} aria-describedby={`${id}-note`} />
@@ -88,6 +91,6 @@ export function ChannelImport({ optionCount, onUse }: {
           {SIGNED.test(chosen.url) && " This address carries a token or signature: it becomes public once saved and may expire before the broadcast."}
         </p>}
       </>}
-    </div>
+    </fieldset>
   </details>;
 }

@@ -342,7 +342,7 @@ Reglas y límites que conviene conocer:
 
 1. **Una URL `blob:` no sirve**: solo existe dentro de la pestaña que la creó. Busque
    en DevTools → Network el `.m3u8` o `.mpd` real.
-2. Solo HTTPS, con nombre de dominio público (no IP, `localhost`, `.local`,
+2. Solo HTTPS, con nombre de dominio público en ASCII (no IP, nombres internacionalizados `xn--`, `localhost`, `.local`,
    `.internal`…), sin usuario ni contraseña en la URL, sin espacios ni comas, de
    hasta 400 caracteres y con puerto 1024 o superior. Las entradas HTTP de una lista
    se omiten porque un sitio HTTPS no puede reproducirlas.

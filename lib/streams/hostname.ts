@@ -19,7 +19,9 @@ export function isPublicHostname(hostname: string): boolean {
   if (/^[0-9.]+$/.test(host)) return false;
   // The bare special-use name (home.arpa, local…) is as internal as anything under it.
   if (host === "localhost" || INTERNAL_SUFFIXES.some((suffix) => host === suffix.slice(1) || host.endsWith(suffix))) return false;
-  return host.split(".").every((label) => label.length > 0 && label.length <= 63 && !label.startsWith("-") && !label.endsWith("-"));
+  // Internationalized (xn--) names are refused: whether a punycode label is valid is the URL parser's
+  // call and SQL cannot make it, so allowing them would let the two layers disagree.
+  return host.split(".").every((label) => label.length > 0 && label.length <= 63 && !label.startsWith("-") && !label.endsWith("-") && !label.startsWith("xn--"));
 }
 
 function ipv4(address: string): number[] | null {

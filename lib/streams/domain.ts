@@ -39,9 +39,9 @@ export const MAX_STREAM_URL = 400;
 const URL_CHARS = /^https:\/\/[^\s,"'<>\\`#]+$/;
 const URL_EXTENSION: Record<UrlProvider, RegExp | null> = { hls: /\.m3u8$/i, dash: /\.mpd$/i, link: null };
 const URL_HELP: Record<UrlProvider, string> = {
-  hls: "Enter an HTTPS URL ending in .m3u8, on a public host name (no IP addresses, spaces or commas).",
-  dash: "Enter an HTTPS URL ending in .mpd, on a public host name (no IP addresses, spaces or commas).",
-  link: "Enter an HTTPS URL on a public host name (no IP addresses, spaces or commas).",
+  hls: "Enter an HTTPS URL ending in .m3u8, on a public ASCII host name (no IP addresses, xn-- names, spaces or commas).",
+  dash: "Enter an HTTPS URL ending in .mpd, on a public ASCII host name (no IP addresses, xn-- names, spaces or commas).",
+  link: "Enter an HTTPS URL on a public ASCII host name (no IP addresses, xn-- names, spaces or commas).",
 };
 
 /**

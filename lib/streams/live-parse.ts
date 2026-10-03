@@ -105,9 +105,17 @@ export function readHlsPlaylist(text: string): PlaylistReading {
     ? { state: "ended" } : { state: "live" };
 }
 
-/** A DASH manifest: `type="dynamic"` on the MPD element means a live presentation. */
+/**
+ * A DASH manifest: `type="dynamic"` on the document's own MPD element means a
+ * live presentation. Comments, CDATA, processing instructions and the DOCTYPE
+ * are dropped first and the MPD must be the root, so an example tag inside a
+ * comment (or an MPD-like element nested in other XML) is never mistaken for it.
+ */
 export function readMpd(text: string): { state: "live" | "ended" | "invalid" } {
-  const root = /<(?:[A-Za-z0-9_-]+:)?MPD\b[^>]*>/.exec(text);
+  const bare = text.replace(/^\uFEFF/, "")
+    .replace(/<!--[\s\S]*?-->/g, "").replace(/<!\[CDATA\[[\s\S]*?\]\]>/g, "")
+    .replace(/<\?[\s\S]*?\?>/g, "").replace(/<!DOCTYPE[^>]*>/gi, "");
+  const root = /^\s*<(?:[A-Za-z0-9_-]+:)?MPD((?:"[^"]*"|'[^']*'|[^>"'])*)>/.exec(bare);
   if (!root) return { state: "invalid" };
-  return /\btype\s*=\s*["']dynamic["']/.test(root[0]) ? { state: "live" } : { state: "ended" };
+  return /(?:^|\s)type\s*=\s*(["'])dynamic\1/.test(root[1]) ? { state: "live" } : { state: "ended" };
 }

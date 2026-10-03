@@ -11,8 +11,10 @@ begin;
 -- lowercase dotted host (labels of 1 to 63 characters without a hyphen at an
 -- edge, at most 253 characters, no IP literal, no all-numeric last label, no
 -- internal suffix such as .local); an optional port from 1024 to 65535; a path
--- of at least "/" without dot segments; and the matching extension. Whether a
--- punycode (xn--) label is valid is left to the application's parser.
+-- of at least "/" without dot segments; and the matching extension.
+-- Internationalized (xn--) host names are refused: whether a punycode label is
+-- valid is the URL parser's call, which SQL cannot make, and the application
+-- refuses them too so the two layers never disagree.
 create or replace function public.valid_stream_url(provider text, id text)
 returns boolean language sql immutable strict set search_path = '' as $$
   select length(id) <= 400
@@ -20,6 +22,7 @@ returns boolean language sql immutable strict set search_path = '' as $$
     and id ~ '^https://([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z0-9]([a-z0-9-]*[a-z0-9])?(:(10(2[4-9]|[3-9][0-9])|1[1-9][0-9]{2}|[2-9][0-9]{3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5]))?/'
     and length(substring(id from '^https://([^/:]+)')) <= 253
     and id !~ '^https://([a-z0-9-]*\.)*[a-z0-9-]{64,}[.:/]'
+    and id !~ '^https://([a-z0-9-]*\.)*xn--'
     and id !~ '^https://[0-9.]+(:|/)'
     and id !~ '^https://[^/:]*\.([0-9]+|0x[0-9a-f]*)(:|/)'
     and id !~ '^https://([a-z0-9-]+\.)*(localhost|local|localdomain|internal|lan|intranet|corp|private)(:|/)'

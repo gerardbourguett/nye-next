@@ -3,14 +3,14 @@ import test from "node:test";
 import { isPublicAddress, isPublicHostname, isPublicHttpsUrl } from "../../lib/streams/hostname";
 
 test("public host names: dotted, lower-case labels only", () => {
-  for (const host of ["cdn.example.com", "A.B.Example.CO.UK", "xn--bcher-kva.example", "live-1.example.tv", "cdn.example.com."]) {
+  for (const host of ["cdn.example.com", "A.B.Example.CO.UK", "live-1.example.tv", "cdn.example.com."]) {
     assert.equal(isPublicHostname(host), true, host);
   }
 });
 
 test("IP literals, single labels and internal suffixes are not public host names", () => {
   for (const host of ["127.0.0.1", "10.0.0.5", "8.8.8.8", "0.0.0.0", "[::1]", "::1", "localhost", "LOCALHOST", "tv", "printer.local",
-    "app.internal", "nas.home.arpa", "home.arpa", "local", "internal", "box.lan", "x.local", "a.localhost", "", ".example.com", "a..example.com", "-a.example.com", "a-.example.com",
+    "app.internal", "nas.home.arpa", "home.arpa", "local", "internal", "box.lan", "x.local", "a.localhost", "", ".example.com", "a..example.com", "-a.example.com", "a-.example.com", "xn--a.com", "xn--bcher-kva.example", "cdn.xn--p1ai", "bücher.example",
     "exa mple.com", "ex_ample.example.com", `${"a".repeat(64)}.example.com`]) {
     assert.equal(isPublicHostname(host), false, host);
   }

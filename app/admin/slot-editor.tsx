@@ -75,7 +75,7 @@ export function SlotEditor({ slot, places, saved }: { slot?: Slot; places: Place
     <div className={styles.sectionHeading}><h2 id="slot-editor-heading">{slot ? "Edit slot" : "Create a slot"}</h2>
       {slot && <Link href="/admin">Cancel editing</Link>}</div>
     <p className={styles.muted}>Slots last one hour by default and can run from {SLOT_LENGTHS}, for example a rehearsal left on air until New Year. Published slots cannot overlap. Option order sets the default stream first.</p>
-    <ChannelImport optionCount={options.length} onUse={useListed} />
+    <ChannelImport optionCount={options.length} onUse={useListed} disabled={pending} />
     <datalist id={`${prefix}-places`}>{places.map((place) => <option key={place.zoneName} value={place.zoneName}>{place.label}</option>)}</datalist>
     <form className={styles.form} onSubmit={(event) => {
       event.preventDefault();

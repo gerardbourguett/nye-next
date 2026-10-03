@@ -77,5 +77,13 @@ test("DASH manifests: dynamic means live, static is a recording, other text is i
   assert.deepEqual(readMpd("<mpd:MPD type='dynamic'></mpd:MPD>"), { state: "live" });
   assert.deepEqual(readMpd('<MPD></MPD>'), { state: "ended" });
   assert.deepEqual(readMpd("<html></html>"), { state: "invalid" });
+  // Only the document's own MPD element counts.
+  assert.deepEqual(readMpd('<?xml version="1.0"?>\n<!-- example: <MPD type="dynamic"> -->\n<MPD type="static"></MPD>'), { state: "ended" });
+  assert.deepEqual(readMpd('<!-- <MPD type="dynamic"> --><MPD type="dynamic"></MPD>'), { state: "live" });
+  assert.deepEqual(readMpd('<html><body><MPD type="dynamic"></MPD></body></html>'), { state: "invalid" });
+  assert.deepEqual(readMpd('<![CDATA[<MPD type="dynamic">]]><MPD></MPD>'), { state: "ended" });
+  assert.deepEqual(readMpd('<MPD xsi:type="dynamic" mytype="dynamic"></MPD>'), { state: "ended" });
+  assert.deepEqual(readMpd('<MPD data-x=">" type="dynamic"></MPD>'), { state: "live" });
+  assert.deepEqual(readMpd('\uFEFF<?xml version="1.0"?><!DOCTYPE MPD><mpd:MPD xmlns:mpd="urn:x" type=\'dynamic\'/>'), { state: "live" });
   assert.deepEqual(readMpd(""), { state: "invalid" });
 });
