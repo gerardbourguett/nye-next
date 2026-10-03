@@ -224,7 +224,8 @@ test("deep links only select well-formed slot and stream pairs", () => {
 
 import { capLiveKeys, isUrlProvider, normalizeStreamUrl, streamHost, validProviderId } from "../../lib/streams/domain";
 
-// Keep in step with `valid_stream_url` in 202610040001_url_stream_sources.sql: run these cases through it in a local Postgres after changing either.
+// Valid or refused by BOTH layers: the application and `valid_stream_url` in 202610040001_url_stream_sources.sql.
+// Run these through it in a local Postgres after changing either.
 const URL_CASES: [provider: "hls" | "dash" | "link", id: string, ok: boolean][] = [
   ["hls", "https://cdn.example.com/live/index.m3u8", true],
   ["hls", "https://cdn.example.com:8443/live/index.m3u8?token=abc&e=1", true],
@@ -248,8 +249,6 @@ const URL_CASES: [provider: "hls" | "dash" | "link", id: string, ok: boolean][] 
   ["hls", "https://[::1]/index.m3u8", false],
   ["hls", "https://singlelabel/index.m3u8", false],
   ["hls", "https://cdn.example.com./live/index.m3u8", false],
-  // Canonical form only: anything the URL parser would rewrite is refused, in the SQL backstop too.
-  ["hls", "https://CDN.example.com/a.m3u8", false],
   ["hls", "https://-cdn.example.com/a.m3u8", false],
   ["hls", "https://cdn-.example.com/a.m3u8", false],
   ["hls", "https://cdn.example.1/a.m3u8", false],
@@ -257,20 +256,13 @@ const URL_CASES: [provider: "hls" | "dash" | "link", id: string, ok: boolean][] 
   ["hls", `https://${"x".repeat(64)}.example.com/a.m3u8`, false],
   ["hls", `https://${"x".repeat(63)}.example.com/a.m3u8`, true],
   ["hls", "https://home.arpa/a.m3u8", false],
-  ["link", "https://www.example.com", false],
-  ["link", "https://www.example.com?x=1", false],
-  ["link", "https://www.example.com/a/../b", false],
-  ["link", "https://www.example.com/a/%2e%2e/b", false],
-  ["link", "https://www.example.com/a/./b", false],
   ["link", "https://www.example.com:1000/b", false],
   ["link", "https://www.example.com:1024/b", true],
   ["link", "https://www.example.com:65535/b", true],
   ["link", "https://www.example.com:65536/b", false],
-  ["link", "https://www.example.com:08443/b", false],
-  ["link", "https://www.example.com/a{b}", false],
+  ["link", "https://www.example.com/a{b}", true],
   ["link", "https://www.example.com/a?b={c}", true],
   ["link", "https://www.example.com/a^b|c[1]", true],
-  ["link", "https://www.example.com/%41%zz/é", false],
   ["link", "https://www.example.com//a", true],
   ["dash", "https://cdn.example.com/live/manifest.mpd", true],
   ["dash", "https://cdn.example.com/live/manifest.m3u8", false],
@@ -282,7 +274,6 @@ const URL_CASES: [provider: "hls" | "dash" | "link", id: string, ok: boolean][] 
 
 test("stream URLs: HTTPS, public host, matching extension, no credentials, separators or fragments", () => {
   for (const [provider, id, ok] of URL_CASES) {
-    // A valid ID is its own canonical form, which is also what the SQL check requires.
     assert.equal(validProviderId(provider, id), ok, `${provider} ${id}`);
   }
   assert.equal(normalizeStreamUrl("link", `https://example.com/${"a".repeat(400)}`), null);
@@ -290,13 +281,37 @@ test("stream URLs: HTTPS, public host, matching extension, no credentials, separ
   assert.equal(normalizeStreamUrl("link", "https://cdn.example.com:8443/x"), "https://cdn.example.com:8443/x");
 });
 
-test("stream URLs canonicalise, and only canonical forms are valid IDs", () => {
+// The application reads these (and saves them in the canonical form below), but the SQL check wants the
+// canonical form and refuses the spelling as typed: that is how the database stays stricter than the app.
+const READ_BUT_NOT_CANONICAL: [provider: "hls" | "dash" | "link", id: string, canonical: string][] = [
+  ["hls", "https://CDN.example.com/a.m3u8", "https://cdn.example.com/a.m3u8"],
+  ["link", "https://www.example.com", "https://www.example.com/"],
+  ["link", "https://www.example.com?x=1", "https://www.example.com/?x=1"],
+  ["link", "https://www.example.com/a/../b", "https://www.example.com/b"],
+  ["link", "https://www.example.com/a/%2e%2e/b", "https://www.example.com/b"],
+  ["link", "https://www.example.com:08443/b", "https://www.example.com:8443/b"],
+];
+
+test("spellings the parser rewrites are accepted when read, and stored in their canonical form", () => {
+  for (const [provider, id, canonical] of READ_BUT_NOT_CANONICAL) {
+    assert.equal(validProviderId(provider, id), true, id);
+    assert.equal(parseStreamSource(provider, id), canonical, id);
+    assert.equal(validProviderId(provider, canonical), true, canonical);
+  }
+});
+
+test("validity does not depend on how this engine serializes a URL (it differs: Node 22 keeps ^ in a path, Node 24 writes %5E)", () => {
+  for (const id of ["https://www.example.com/a^b", "https://www.example.com/a%5Eb", "https://www.example.com/a{b}", "https://www.example.com/a%7Bb%7D"]) {
+    assert.equal(validProviderId("link", id), true, id);
+  }
+});
+
+test("stream URLs are stored in the parser's canonical form", () => {
   assert.equal(parseStreamSource("hls", "  https://CDN.Example.com/Live/Index.M3U8?x=1  "), "https://cdn.example.com/Live/Index.M3U8?x=1");
   assert.equal(parseStreamSource("link", "https://www.example.com"), "https://www.example.com/");
   assert.throws(() => parseStreamSource("hls", "https://cdn.example.com/index.mpd"), /\.m3u8/);
   assert.throws(() => parseStreamSource("dash", "https://cdn.example.com/index.m3u8"), /\.mpd/);
   assert.throws(() => parseStreamSource("link", "http://www.example.com/"), /HTTPS/);
-  assert.throws(() => validateOptions([{ provider: "hls", id: "https://CDN.example.com/a.m3u8", label: "Not canonical" }]));
 });
 
 test("URL options validate, deduplicate, resolve addresses and survive deep links", () => {

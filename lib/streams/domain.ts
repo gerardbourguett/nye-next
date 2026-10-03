@@ -49,7 +49,7 @@ const URL_HELP: Record<UrlProvider, string> = {
  * a public host name, a port of 1024 or above (or none), and for `hls`/`dash`
  * the matching file extension; the fragment is dropped.
  */
-export function normalizeStreamUrl(provider: UrlProvider, input: string): string | null {
+function parseStreamUrl(provider: UrlProvider, input: string): URL | null {
   if (input.length > MAX_STREAM_URL || !URL_CHARS.test(input)) return null;
   let url: URL;
   try { url = new URL(input); } catch { return null; }
@@ -57,7 +57,24 @@ export function normalizeStreamUrl(provider: UrlProvider, input: string): string
   if (url.hash || url.hostname.endsWith(".") || !isPublicHttpsUrl(url)) return null;
   const extension = URL_EXTENSION[provider];
   if (extension && !extension.test(url.pathname)) return null;
-  return url.href.length <= MAX_STREAM_URL ? url.href : null;
+  return url;
+}
+
+/** The form to store, as this runtime's URL parser writes it, or null when the rules refuse the address. */
+export function normalizeStreamUrl(provider: UrlProvider, input: string): string | null {
+  const url = parseStreamUrl(provider, input);
+  return url && url.href.length <= MAX_STREAM_URL ? url.href : null;
+}
+
+/**
+ * Whether a stored ID obeys the rules. Deliberately not "equals what the
+ * parser would write": engines differ on how they serialize characters such
+ * as ^ (Node 22 keeps it in a path, Node 24 writes %5E) and browsers differ
+ * too, so a byte-for-byte test would let a row the server saved fail to read
+ * back somewhere and take the whole schedule with it.
+ */
+export function isStreamUrl(provider: UrlProvider, id: string): boolean {
+  return parseStreamUrl(provider, id) !== null;
 }
 
 const queryLength = (text: string) => new URLSearchParams({ k: text }).toString().length - 2;
@@ -84,7 +101,7 @@ export function validProviderId(provider: unknown, id: unknown): boolean {
   if (typeof id !== "string") return false;
   if (provider === "twitch") return TWITCH_ID.test(id);
   if (provider === "youtube") return YOUTUBE_ID.test(id);
-  if (isUrlProvider(provider)) return normalizeStreamUrl(provider, id) === id;
+  if (isUrlProvider(provider)) return isStreamUrl(provider, id);
   return provider === "youtube_channel" && YOUTUBE_CHANNEL_ID.test(id);
 }
 
