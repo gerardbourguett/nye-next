@@ -40,8 +40,15 @@ export function StreamVideo({ kind, url, label }: { kind: "hls" | "dash"; url: s
           const { default: Hls } = await import("hls.js");
           if (disposed) return;
           if (!Hls.isSupported()) {
-            if (target.canPlayType("application/vnd.apple.mpegurl")) target.src = url;
-            else fail();
+            if (target.canPlayType("application/vnd.apple.mpegurl")) {
+              target.src = url;
+              // Removing the element does not stop a native player: pause it and drop its source.
+              destroy = () => {
+                target.pause();
+                target.removeAttribute("src");
+                target.load();
+              };
+            } else fail();
             return;
           }
           const hls = new Hls();

@@ -139,6 +139,31 @@ for (const [label, install] of [
   });
 }
 
+test("with the browser's own HLS player (no hls.js), closing the player pauses and unloads the video", async ({ page, consoleErrors }) => {
+  await page.addInitScript(() => {
+    // No Media Source Extensions: hls.js is unsupported, so the room falls back to the native player.
+    for (const name of ["MediaSource", "ManagedMediaSource", "WebKitMediaSource"]) Object.defineProperty(window, name, { value: undefined, configurable: true });
+    const original = HTMLMediaElement.prototype.canPlayType;
+    HTMLMediaElement.prototype.canPlayType = function (type: string) { return /mpegurl/i.test(type) ? "maybe" : original.call(this, type); };
+    const w = window as unknown as { __paused: boolean; __unloaded: boolean };
+    w.__paused = false; w.__unloaded = false;
+    const pause = HTMLMediaElement.prototype.pause;
+    HTMLMediaElement.prototype.pause = function () { w.__paused = true; return pause.call(this); };
+    // The app never calls load() itself except to unload; record that it did so with no source left.
+    const load = HTMLMediaElement.prototype.load;
+    HTMLMediaElement.prototype.load = function () { if (!this.getAttribute("src")) w.__unloaded = true; return load.call(this); };
+  });
+  await page.goto("/watch");
+  await channel(page, STREAMS.direct.label).click();
+  await page.getByRole("button", { name: "Load HLS player" }).click();
+  await page.getByRole("button", { name: "Close player" }).click();
+  await expect(page.locator("video")).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => (window as unknown as { __paused: boolean }).__paused)).toBe(true);
+  await expect.poll(() => page.evaluate(() => (window as unknown as { __unloaded: boolean }).__unloaded)).toBe(true);
+  // The unsupported native source may log a load error of its own; nothing else may fail.
+  consoleErrors.splice(0, consoleErrors.length, ...consoleErrors.filter((text) => !/Failed to load resource|ERR_/.test(text)));
+});
+
 test("a web link source is never embedded: it opens its own page", async ({ page }) => {
   await page.goto("/watch");
   await channel(page, STREAMS.page.label).click();
