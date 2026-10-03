@@ -17,7 +17,8 @@ export function isPublicHostname(hostname: string): boolean {
   if (!host || host.length > 253 || !/^[a-z0-9.-]+$/.test(host)) return false;
   if (!host.includes(".") || host.startsWith(".") || host.includes("..")) return false;
   if (/^[0-9.]+$/.test(host)) return false;
-  if (host === "localhost" || INTERNAL_SUFFIXES.some((suffix) => host.endsWith(suffix))) return false;
+  // The bare special-use name (home.arpa, local…) is as internal as anything under it.
+  if (host === "localhost" || INTERNAL_SUFFIXES.some((suffix) => host === suffix.slice(1) || host.endsWith(suffix))) return false;
   return host.split(".").every((label) => label.length > 0 && label.length <= 63 && !label.startsWith("-") && !label.endsWith("-"));
 }
 

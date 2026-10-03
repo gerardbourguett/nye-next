@@ -1,7 +1,8 @@
 import "server-only";
 
 import { optionKey, type StreamOption } from "./domain";
-import { parseChannelFeed, parseTwitchStreams, parseTwitchUsers, parseYouTubeVideos, readHlsPlaylist, readMpd, type LiveInfo } from "./live-parse";
+import { parseChannelFeed, parseTwitchStreams, parseTwitchUsers, parseYouTubeVideos, type LiveInfo } from "./live-parse";
+import { playlistStatus } from "./playlist-status";
 import { fetchPublicText } from "./safe-fetch";
 
 // Provider status is optional: without credentials a provider is simply not
@@ -100,26 +101,6 @@ async function youtubeChannel(channelId: string): Promise<LiveInfo | null> {
 }
 
 /**
- * A direct stream's own playlist or manifest. Live means the server answers
- * with a running (not ended) playlist; a 404 or 410 is a confirmed absence.
- * Recordings, errors and anything unreadable stay unconfirmed (null), since
- * a finished playlist can still be watched and a 403 may be an expired token.
- */
-async function playlistStatus(option: StreamOption): Promise<LiveInfo | null> {
-  let url = option.id;
-  for (let hop = 0; hop < 2; hop++) {
-    const { status, text, url: finalUrl } = await fetchPublicText(url, TIMEOUT);
-    if (status === 404 || status === 410) return { live: false };
-    if (status !== 200) return null;
-    const reading = option.provider === "hls" ? readHlsPlaylist(text) : readMpd(text);
-    if (reading.state === "live") return { live: true };
-    if (reading.state !== "master") return null;
-    url = new URL(reading.variant, finalUrl).href;
-  }
-  return null;
-}
-
-/**
  * Confirmed status for each option a provider could answer for. Options a
  * provider cannot answer (no credentials, an error) are left out entirely.
  */
@@ -144,7 +125,7 @@ export async function liveStatus(options: readonly StreamOption[]): Promise<Reco
   const streams = pending.filter((option) => option.provider === "hls" || option.provider === "dash");
   await Promise.all([
     // An unreachable stream host is remembered as unknown too, so polling cannot hammer it.
-    ...streams.map((option) => playlistStatus(option).then(
+    ...streams.map((option) => playlistStatus(option, (url) => fetchPublicText(url, TIMEOUT)).then(
       (info) => remember(option, info),
       () => remember(option, null))),
     twitchStatus(twitch.map((option) => option.id)).then(

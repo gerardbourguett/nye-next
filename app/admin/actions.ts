@@ -101,7 +101,7 @@ export async function saveSlot(form: FormData): Promise<ActionResult> {
   return { ok: true, message: payload.published ? "Slot published. The room refreshes within 30 seconds." : "Draft saved. It is not visible in the room." };
 }
 
-export type ChannelListResult = { ok: boolean; message: string; channels?: ListedChannel[] };
+export type ChannelListResult = { ok: boolean; message: string; channels?: ListedChannel[]; skipped?: number; truncated?: boolean };
 const LIST_BYTES = 8 * 1024 * 1024;
 
 /**
@@ -132,12 +132,17 @@ export async function loadChannelList(form: FormData): Promise<ChannelListResult
   if (parsed.isStream) {
     return { ok: false, message: "That address is a stream, not a list of channels. Use it directly as an HLS stream option." };
   }
-  if (!parsed.channels.length) return { ok: false, message: "No channels were found. A list starts with #EXTM3U and has #EXTINF lines." };
-  const usable = parsed.channels.filter((channel) => channel.provider).length;
+  if (!parsed.channels.length) {
+    return { ok: false, message: parsed.skipped
+      ? `No usable channels: ${parsed.skipped} entries were plain HTTP, IP addresses or otherwise cannot play on this site.`
+      : "No channels were found. A list starts with #EXTM3U and has #EXTINF lines." };
+  }
   return {
     ok: true,
-    message: `${parsed.channels.length} entries read; ${usable} can be used in a slot.`,
+    message: `${parsed.channels.length}${parsed.truncated ? "+" : ""} usable channels read${parsed.skipped ? `; ${parsed.skipped} others cannot be used here` : ""}.`,
     channels: parsed.channels,
+    skipped: parsed.skipped,
+    truncated: parsed.truncated,
   };
 }
 

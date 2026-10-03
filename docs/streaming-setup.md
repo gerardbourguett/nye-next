@@ -355,7 +355,7 @@ Reglas y límites que conviene conocer:
 5. **Estado “Live”**: para HLS y DASH, el servidor lee la lista de reproducción o el
    manifiesto (solo hosts públicos, con límite de tamaño y tiempo, caché de 60 s):
    es “Live” si la lista está en marcha y no ha terminado (HLS sin `#EXT-X-ENDLIST`,
-   DASH con `type="dynamic"`), y “Offline” solo si el servidor responde 404/410.
+   DASH con `type="dynamic"`), y “Offline” solo si el servidor responde 404/410 en la dirección del propio stream (si falla solo la primera rendición de una lista maestra, queda sin confirmar).
    Una grabación, un error o un host inalcanzable quedan como “Scheduled”. No hay
    cantidad de espectadores ni chat.
 6. Los derechos de retransmitir una señal ajena son responsabilidad de quien la

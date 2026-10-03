@@ -22,16 +22,16 @@ export function ChannelImport({ optionCount, onUse }: {
   const id = useId();
   const [input, setInput] = useState("");
   const [channels, setChannels] = useState<ListedChannel[] | null>(null);
+  const [skipped, setSkipped] = useState(0);
+  const [truncated, setTruncated] = useState(false);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [filter, setFilter] = useState("");
   const [target, setTarget] = useState(0);
   const [chosen, setChosen] = useState<ListedChannel | null>(null);
   const [pending, startTransition] = useTransition();
 
-  const usable = (channels ?? []).filter((channel) => channel.provider);
   const query = filter.trim().toLocaleLowerCase();
-  const matches = usable.filter((channel) => !query || `${channel.name} ${channel.group ?? ""}`.toLocaleLowerCase().includes(query));
-  const skipped = (channels ?? []).length - usable.length;
+  const matches = (channels ?? []).filter((channel) => !query || `${channel.name} ${channel.group ?? ""}`.toLocaleLowerCase().includes(query));
 
   return <details className={styles.optionEditor}>
     <summary>Pick channels from a list (.m3u)</summary>
@@ -50,6 +50,8 @@ export function ChannelImport({ optionCount, onUse }: {
             const result = await loadChannelList(form);
             setMessage({ ok: result.ok, text: result.message });
             setChannels(result.ok ? result.channels ?? [] : null);
+            setSkipped(result.skipped ?? 0);
+            setTruncated(Boolean(result.truncated));
             setChosen(null);
           } catch { setMessage({ ok: false, text: "The list could not be read. Try again, or paste a smaller list." }); }
         });
@@ -71,12 +73,13 @@ export function ChannelImport({ optionCount, onUse }: {
               setChosen(channel);
             }}>
               <span className={styles.channelName}>{channel.name}</span>
-              <span className={styles.channelMeta}>{[providerName(channel.provider!), streamHost({ provider: channel.provider!, id: channel.url, label: "" }), channel.group].filter(Boolean).join(" · ")}</span>
+              <span className={styles.channelMeta}>{[providerName(channel.provider), streamHost({ provider: channel.provider, id: channel.url, label: "" }), channel.group].filter(Boolean).join(" · ")}</span>
             </button>
           </li>)}
         </ul>
         <p className={styles.muted}>
           {matches.length > SHOWN ? `Showing ${SHOWN} of ${matches.length}. Search to narrow the list. ` : `${matches.length} shown. `}
+          {truncated && `Only the first 1,000 usable channels are listed. `}
           {skipped > 0 && `${skipped} entries were left out: plain HTTP, IP addresses and other addresses the room cannot use.`}
         </p>
         {chosen && <p className={styles.notice} role="status">

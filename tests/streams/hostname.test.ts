@@ -10,7 +10,7 @@ test("public host names: dotted, lower-case labels only", () => {
 
 test("IP literals, single labels and internal suffixes are not public host names", () => {
   for (const host of ["127.0.0.1", "10.0.0.5", "8.8.8.8", "0.0.0.0", "[::1]", "::1", "localhost", "LOCALHOST", "tv", "printer.local",
-    "app.internal", "nas.home.arpa", "box.lan", "a.localhost", "", ".example.com", "a..example.com", "-a.example.com", "a-.example.com",
+    "app.internal", "nas.home.arpa", "home.arpa", "local", "internal", "box.lan", "x.local", "a.localhost", "", ".example.com", "a..example.com", "-a.example.com", "a-.example.com",
     "exa mple.com", "ex_ample.example.com", `${"a".repeat(64)}.example.com`]) {
     assert.equal(isPublicHostname(host), false, host);
   }

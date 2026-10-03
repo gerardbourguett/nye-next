@@ -65,7 +65,7 @@ export function SlotEditor({ slot, places, saved }: { slot?: Slot; places: Place
   }
 
   const useListed = (index: number, channel: ListedChannel) => {
-    if (channel.provider) updateOption(index, { provider: channel.provider, source: channel.url, label: channel.name.trim().slice(0, 120) });
+    updateOption(index, { provider: channel.provider, source: channel.url, label: channel.name.trim().slice(0, 120) });
   };
   const updateOption = (index: number, change: Partial<OptionInput>) => {
     setOptions((current) => current.map((option, position) => position === index ? { ...option, ...change } : option));

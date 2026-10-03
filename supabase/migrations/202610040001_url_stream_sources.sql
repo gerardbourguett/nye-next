@@ -3,19 +3,29 @@ begin;
 -- Direct stream sources: `hls` (.m3u8), `dash` (.mpd) and `link` (any page),
 -- whose id is an HTTPS URL. Every existing row stays valid; the new providers
 -- only add accepted shapes. Mirrors normalizeStreamUrl() in
--- lib/streams/domain.ts: HTTPS, at most 400 characters, no spaces, commas,
--- quotes, angle brackets, backslashes, backticks or fragments, a dotted public
--- host name (no IP literal, no internal suffix) with an optional port, and the
--- matching extension. The application is stricter about ports and parses the
--- URL; this is the backstop for writes that bypass it.
+-- lib/streams/domain.ts, and like it requires the CANONICAL form of the URL
+-- (the application refuses to read a row whose id its own parser would
+-- rewrite, which would take the whole schedule down): at most 400 characters,
+-- only characters a URL parser leaves as written (braces only in the query), a lowercase dotted host name
+-- (labels of at most 63 characters that do not start or end with a hyphen,
+-- no IP literal, no all-numeric last label, no internal suffix, at most 253
+-- characters), an optional port
+-- from 1024 to 65535, a path (at least "/"), no dot segments, and the
+-- matching extension. Punycode validity (xn--) is the one thing only the
+-- application's parser checks.
 create or replace function public.valid_stream_url(provider text, id text)
 returns boolean language sql immutable strict set search_path = '' as $$
   select length(id) <= 400
-    and id ~ '^https://[^[:space:],"''<>\\`#]+$'
-    and id ~* '^https://[a-z0-9-]+(\.[a-z0-9-]+)+(:[0-9]{4,5})?(/|\?|$)'
-    and id !~* '^https://[0-9.]+(:|/|\?|$)'
-    and id !~* '^https://([a-z0-9-]+\.)*(localhost|local|localdomain|internal|lan|intranet|corp|private)(:|/|\?|$)'
-    and id !~* '^https://([a-z0-9-]+\.)*home\.arpa(:|/|\?|$)'
+    and id ~ '^https://[][A-Za-z0-9._~:/?@!$&()*+;=%|{}^-]+$'
+    and id ~ '^https://([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z0-9]([a-z0-9-]*[a-z0-9])?(:(10(2[4-9]|[3-9][0-9])|1[1-9][0-9]{2}|[2-9][0-9]{3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5]))?/'
+    and length(substring(id from '^https://([^/:]+)')) <= 253
+    and id !~ '^https://([a-z0-9-]*\.)*[a-z0-9-]{64,}[.:/]'
+    and id !~ '^[^?]*[{}]'
+    and id !~ '^https://[0-9.]+(:|/)'
+    and id !~ '^https://[^/:]*\.([0-9]+|0x[0-9a-f]*)(:|/)'
+    and id !~ '^https://([a-z0-9-]+\.)*(localhost|local|localdomain|internal|lan|intranet|corp|private)(:|/)'
+    and id !~ '^https://([a-z0-9-]+\.)*home\.arpa(:|/)'
+    and id !~* '^https://[^/]*/([^?]*/)?(\.|%2e){1,2}(/|\?|$)'
     and (provider <> 'hls' or id ~* '^[^?]*\.m3u8(\?.*)?$')
     and (provider <> 'dash' or id ~* '^[^?]*\.mpd(\?.*)?$');
 $$;

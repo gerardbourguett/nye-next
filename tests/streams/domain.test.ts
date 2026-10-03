@@ -222,9 +222,9 @@ test("deep links only select well-formed slot and stream pairs", () => {
   }
 });
 
-import { capLiveKeys, isUrlProvider, normalizeStreamUrl, streamHost } from "../../lib/streams/domain";
+import { capLiveKeys, isUrlProvider, normalizeStreamUrl, streamHost, validProviderId } from "../../lib/streams/domain";
 
-// The same cases run against the SQL backstop in 202610040001_url_stream_sources.sql.
+// Keep in step with `valid_stream_url` in 202610040001_url_stream_sources.sql: run these cases through it in a local Postgres after changing either.
 const URL_CASES: [provider: "hls" | "dash" | "link", id: string, ok: boolean][] = [
   ["hls", "https://cdn.example.com/live/index.m3u8", true],
   ["hls", "https://cdn.example.com:8443/live/index.m3u8?token=abc&e=1", true],
@@ -248,6 +248,30 @@ const URL_CASES: [provider: "hls" | "dash" | "link", id: string, ok: boolean][] 
   ["hls", "https://[::1]/index.m3u8", false],
   ["hls", "https://singlelabel/index.m3u8", false],
   ["hls", "https://cdn.example.com./live/index.m3u8", false],
+  // Canonical form only: anything the URL parser would rewrite is refused, in the SQL backstop too.
+  ["hls", "https://CDN.example.com/a.m3u8", false],
+  ["hls", "https://-cdn.example.com/a.m3u8", false],
+  ["hls", "https://cdn-.example.com/a.m3u8", false],
+  ["hls", "https://cdn.example.1/a.m3u8", false],
+  ["hls", "https://cdn.example.0x1f/a.m3u8", false],
+  ["hls", `https://${"x".repeat(64)}.example.com/a.m3u8`, false],
+  ["hls", `https://${"x".repeat(63)}.example.com/a.m3u8`, true],
+  ["hls", "https://home.arpa/a.m3u8", false],
+  ["link", "https://www.example.com", false],
+  ["link", "https://www.example.com?x=1", false],
+  ["link", "https://www.example.com/a/../b", false],
+  ["link", "https://www.example.com/a/%2e%2e/b", false],
+  ["link", "https://www.example.com/a/./b", false],
+  ["link", "https://www.example.com:1000/b", false],
+  ["link", "https://www.example.com:1024/b", true],
+  ["link", "https://www.example.com:65535/b", true],
+  ["link", "https://www.example.com:65536/b", false],
+  ["link", "https://www.example.com:08443/b", false],
+  ["link", "https://www.example.com/a{b}", false],
+  ["link", "https://www.example.com/a?b={c}", true],
+  ["link", "https://www.example.com/a^b|c[1]", true],
+  ["link", "https://www.example.com/%41%zz/é", false],
+  ["link", "https://www.example.com//a", true],
   ["dash", "https://cdn.example.com/live/manifest.mpd", true],
   ["dash", "https://cdn.example.com/live/manifest.m3u8", false],
   ["link", "https://www.example.com/watch/live", true],
@@ -258,7 +282,8 @@ const URL_CASES: [provider: "hls" | "dash" | "link", id: string, ok: boolean][] 
 
 test("stream URLs: HTTPS, public host, matching extension, no credentials, separators or fragments", () => {
   for (const [provider, id, ok] of URL_CASES) {
-    assert.equal(normalizeStreamUrl(provider, id) !== null, ok, `${provider} ${id}`);
+    // A valid ID is its own canonical form, which is also what the SQL check requires.
+    assert.equal(validProviderId(provider, id), ok, `${provider} ${id}`);
   }
   assert.equal(normalizeStreamUrl("link", `https://example.com/${"a".repeat(400)}`), null);
   assert.equal(normalizeStreamUrl("link", "https://cdn.example.com:22/x"), null, "privileged ports are refused");
