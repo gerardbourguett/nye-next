@@ -2,6 +2,8 @@ import "server-only";
 
 import { optionKey, type StreamOption } from "./domain";
 import { parseChannelFeed, parseTwitchStreams, parseTwitchUsers, parseYouTubeVideos, type LiveInfo } from "./live-parse";
+import { playlistStatus } from "./playlist-status";
+import { fetchPublicText } from "./safe-fetch";
 
 // Provider status is optional: without credentials a provider is simply not
 // asked, and the room keeps saying "scheduled", never "live". Results are
@@ -120,7 +122,12 @@ export async function liveStatus(options: readonly StreamOption[]): Promise<Reco
   const twitch = pending.filter((option) => option.provider === "twitch");
   const videos = pending.filter((option) => option.provider === "youtube");
   const channels = pending.filter((option) => option.provider === "youtube_channel");
+  const streams = pending.filter((option) => option.provider === "hls" || option.provider === "dash");
   await Promise.all([
+    // An unreachable stream host is remembered as unknown too, so polling cannot hammer it.
+    ...streams.map((option) => playlistStatus(option, (url) => fetchPublicText(url, TIMEOUT)).then(
+      (info) => remember(option, info),
+      () => remember(option, null))),
     twitchStatus(twitch.map((option) => option.id)).then(
       (found) => found && twitch.forEach((option) => remember(option, found.get(option.id))),
       () => undefined),

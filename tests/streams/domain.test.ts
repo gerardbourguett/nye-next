@@ -221,3 +221,136 @@ test("deep links only select well-formed slot and stream pairs", () => {
     assert.equal(parseSelection(slotId, key), null, String(key));
   }
 });
+
+import { capLiveKeys, isUrlProvider, normalizeStreamUrl, streamHost, validProviderId } from "../../lib/streams/domain";
+
+// Valid or refused by BOTH layers: the application and `valid_stream_url` in 202610040001_url_stream_sources.sql.
+// Run these through it in a local Postgres after changing either.
+const URL_CASES: [provider: "hls" | "dash" | "link", id: string, ok: boolean][] = [
+  ["hls", "https://cdn.example.com/live/index.m3u8", true],
+  ["hls", "https://cdn.example.com:8443/live/index.m3u8?token=abc&e=1", true],
+  ["hls", "https://a.b.example.co.uk/x/master.m3u8", true],
+  ["hls", "https://cdn.example.com/live/index.mpd", false],
+  ["hls", "https://cdn.example.com/index.m3u8.txt", false],
+  ["hls", "https://cdn.example.com/?u=a.m3u8", false],
+  ["hls", "http://cdn.example.com/index.m3u8", false],
+  ["hls", "https://127.0.0.1/index.m3u8", false],
+  ["hls", "https://10.0.0.5:8443/index.m3u8", false],
+  ["hls", "https://localhost/index.m3u8", false],
+  ["hls", "https://printer.local/index.m3u8", false],
+  ["hls", "https://app.internal/index.m3u8", false],
+  ["hls", "https://nas.home.arpa/index.m3u8", false],
+  ["hls", "https://user:pw@cdn.example.com/index.m3u8", false],
+  ["hls", "https://user@cdn.example.com/index.m3u8", false],
+  ["hls", "https://cdn.example.com/in dex.m3u8", false],
+  ["hls", "https://cdn.example.com/a,b.m3u8", false],
+  ["hls", "https://cdn.example.com/index.m3u8#frag", false],
+  ["hls", "https://cdn.example.com/it's.m3u8", false],
+  ["hls", "https://[::1]/index.m3u8", false],
+  ["hls", "https://singlelabel/index.m3u8", false],
+  ["hls", "https://cdn.example.com./live/index.m3u8", false],
+  ["hls", "https://xn--a.com/live.m3u8", false],
+  ["hls", "https://xn--bcher-kva.example/live.m3u8", false],
+  ["hls", "https://bücher.example/live.m3u8", false],
+  ["hls", "https://cdn.xn--p1ai/live.m3u8", false],
+  ["hls", "https://my--cdn.example.com/live.m3u8", true],
+  ["hls", "https://-cdn.example.com/a.m3u8", false],
+  ["hls", "https://cdn-.example.com/a.m3u8", false],
+  ["hls", "https://cdn.example.1/a.m3u8", false],
+  ["hls", "https://cdn.example.0x1f/a.m3u8", false],
+  ["hls", `https://${"x".repeat(64)}.example.com/a.m3u8`, false],
+  ["hls", `https://${"x".repeat(63)}.example.com/a.m3u8`, true],
+  ["hls", "https://home.arpa/a.m3u8", false],
+  ["link", "https://www.example.com:1000/b", false],
+  ["link", "https://www.example.com:1024/b", true],
+  ["link", "https://www.example.com:65535/b", true],
+  ["link", "https://www.example.com:65536/b", false],
+  ["link", "https://www.example.com/a{b}", true],
+  ["link", "https://www.example.com/a?b={c}", true],
+  ["link", "https://www.example.com/a^b|c[1]", true],
+  ["link", "https://www.example.com//a", true],
+  ["dash", "https://cdn.example.com/live/manifest.mpd", true],
+  ["dash", "https://cdn.example.com/live/manifest.m3u8", false],
+  ["link", "https://www.example.com/watch/live", true],
+  ["link", "http://www.example.com/", false],
+  ["link", "https://192.168.1.10/", false],
+  ["link", "javascript:alert(1)", false],
+];
+
+test("stream URLs: HTTPS, public host, matching extension, no credentials, separators or fragments", () => {
+  for (const [provider, id, ok] of URL_CASES) {
+    assert.equal(validProviderId(provider, id), ok, `${provider} ${id}`);
+  }
+  assert.equal(normalizeStreamUrl("link", `https://example.com/${"a".repeat(400)}`), null);
+  assert.equal(normalizeStreamUrl("link", "https://cdn.example.com:22/x"), null, "privileged ports are refused");
+  assert.equal(normalizeStreamUrl("link", "https://cdn.example.com:8443/x"), "https://cdn.example.com:8443/x");
+});
+
+// The application reads these (and saves them in the canonical form below), but the SQL check wants the
+// canonical form and refuses the spelling as typed: that is how the database stays stricter than the app.
+const READ_BUT_NOT_CANONICAL: [provider: "hls" | "dash" | "link", id: string, canonical: string][] = [
+  ["hls", "https://CDN.example.com/a.m3u8", "https://cdn.example.com/a.m3u8"],
+  ["link", "https://www.example.com", "https://www.example.com/"],
+  ["link", "https://www.example.com?x=1", "https://www.example.com/?x=1"],
+  ["link", "https://www.example.com/a/../b", "https://www.example.com/b"],
+  ["link", "https://www.example.com/a/%2e%2e/b", "https://www.example.com/b"],
+  ["link", "https://www.example.com:08443/b", "https://www.example.com:8443/b"],
+];
+
+test("spellings the parser rewrites are accepted when read, and stored in their canonical form", () => {
+  for (const [provider, id, canonical] of READ_BUT_NOT_CANONICAL) {
+    assert.equal(validProviderId(provider, id), true, id);
+    assert.equal(parseStreamSource(provider, id), canonical, id);
+    assert.equal(validProviderId(provider, canonical), true, canonical);
+  }
+});
+
+test("validity does not depend on how this engine serializes a URL (it differs: Node 22 keeps ^ in a path, Node 24 writes %5E)", () => {
+  for (const id of ["https://www.example.com/a^b", "https://www.example.com/a%5Eb", "https://www.example.com/a{b}", "https://www.example.com/a%7Bb%7D"]) {
+    assert.equal(validProviderId("link", id), true, id);
+  }
+});
+
+test("stream URLs are stored in the parser's canonical form", () => {
+  assert.equal(parseStreamSource("hls", "  https://CDN.Example.com/Live/Index.M3U8?x=1  "), "https://cdn.example.com/Live/Index.M3U8?x=1");
+  assert.equal(parseStreamSource("link", "https://www.example.com"), "https://www.example.com/");
+  assert.throws(() => parseStreamSource("hls", "https://cdn.example.com/index.mpd"), /\.m3u8/);
+  assert.throws(() => parseStreamSource("dash", "https://cdn.example.com/index.m3u8"), /\.mpd/);
+  assert.throws(() => parseStreamSource("link", "http://www.example.com/"), /HTTPS/);
+});
+
+test("URL options validate, deduplicate, resolve addresses and survive deep links", () => {
+  const hls: StreamOption = { provider: "hls", id: "https://cdn.example.com/live/index.m3u8?t=1", label: "Sydney feed", zone: "Australia/Sydney" };
+  const link: StreamOption = { provider: "link", id: "https://tv.example.com/live", label: "TV page" };
+  assert.deepEqual(validateOptions([hls, link, twitch]), [hls, link, twitch]);
+  assert.throws(() => validateOptions([hls, { ...hls, label: "Same address" }]));
+  assert.equal(providerUrl(hls), hls.id);
+  assert.equal(providerName("hls"), "HLS");
+  assert.equal(providerName("dash"), "DASH");
+  assert.equal(providerName("link"), "Web");
+  assert.equal(streamHost(hls), "cdn.example.com");
+  assert.equal(streamHost(twitch), null);
+  assert.throws(() => embedUrl(hls, "example.com"), /video player/);
+  assert.equal(isUrlProvider("hls") && isUrlProvider("link") && !isUrlProvider("twitch"), true);
+  const key = optionKey(hls);
+  assert.deepEqual(parseSelection(slot.id, key), { slotId: slot.id, key });
+  const roundTrip = new URLSearchParams(new URLSearchParams({ slot: slot.id, stream: key }).toString()).get("stream");
+  assert.equal(roundTrip, key);
+  assert.equal(parseSelection(slot.id, "hls:https://127.0.0.1/a.m3u8"), null);
+  assert.equal(key.includes(","), false, "keys stay safe in comma-separated status requests");
+});
+
+test("status keys are capped by count and by their percent-encoded length", () => {
+  assert.deepEqual(capLiveKeys(["twitch:a", "twitch:b"]), ["twitch:a", "twitch:b"]);
+  assert.equal(capLiveKeys(Array.from({ length: 40 }, (_, index) => `twitch:c${index}`)).length, 24);
+  // Signed URLs expand a lot when encoded: ':' '/' '?' '=' '&' each become three characters.
+  const signed = (index: number) => `hls:https://cdn.example.com/live/${index}/index.m3u8?token=${"a=b&".repeat(60)}`;
+  const kept = capLiveKeys(Array.from({ length: 24 }, (_, index) => signed(index)));
+  const wire = new URLSearchParams({ keys: kept.join(",") }).toString();
+  assert.ok(wire.length <= 6_005, `encoded query is ${wire.length} characters`);
+  assert.ok(kept.length < 24, "the encoded length, not the raw one, limits the list");
+  // The raw characters alone would have fit the old 6,000-character cap for 20 of these keys.
+  assert.ok(Array.from({ length: 20 }, (_, index) => signed(index)).join(",").length <= 6_000);
+  // An oversized key is skipped, not allowed to block the smaller ones after it.
+  assert.deepEqual(capLiveKeys(["twitch:a", `hls:https://cdn.example.com/${"/".repeat(2_500)}`, "twitch:b"]), ["twitch:a", "twitch:b"]);
+});
