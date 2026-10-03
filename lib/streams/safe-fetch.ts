@@ -4,6 +4,7 @@ import { lookup as dnsLookup, type LookupAddress } from "node:dns";
 import https from "node:https";
 
 import { isPublicAddress, isPublicHttpsUrl } from "./hostname";
+import { readResponse, type ReadResponse } from "./read-response";
 
 const MAX_BYTES = 512 * 1024;
 const MAX_REDIRECTS = 3;
@@ -27,30 +28,12 @@ function publicLookup(hostname: string, options: { all?: boolean; family?: numbe
   });
 }
 
-type Response = { status: number; location?: string; text: string };
-
-function once(url: URL, signal: AbortSignal, maxBytes: number): Promise<Response> {
+function once(url: URL, signal: AbortSignal, maxBytes: number): Promise<ReadResponse> {
   return new Promise((resolve, reject) => {
     const request = https.request(url, {
       method: "GET", lookup: publicLookup as never, signal,
       headers: { accept: ACCEPT, "user-agent": "nye-next status check" },
-    }, (response) => {
-      const status = response.statusCode ?? 0;
-      if (status >= 300 && status < 400) {
-        response.resume();
-        resolve({ status, location: response.headers.location, text: "" });
-        return;
-      }
-      const chunks: Buffer[] = [];
-      let size = 0;
-      response.on("data", (chunk: Buffer) => {
-        size += chunk.length;
-        if (size > maxBytes) request.destroy(new Error("Response too large"));
-        else chunks.push(chunk);
-      });
-      response.on("end", () => resolve({ status, text: Buffer.concat(chunks).toString("utf8") }));
-      response.on("error", reject);
-    });
+    }, (response) => readResponse(response, request, maxBytes).then(resolve, reject));
     request.on("error", reject);
     request.end();
   });
