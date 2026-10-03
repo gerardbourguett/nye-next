@@ -139,3 +139,27 @@ test("a direct stream confirmed live by its playlist shows Live, with no viewer 
   await expect(channel(page, STREAMS.direct.label)).toContainText("Live");
   await expect(channel(page, STREAMS.direct.label)).not.toContainText("watching");
 });
+
+test("when the video element itself errors, the player is released and stops polling the stream", async ({ page }) => {
+  await claimNativeHls(page);
+  let playlistRequests = 0;
+  await page.route("https://streams.example.test/**", (route) => {
+    if (route.request().url().endsWith(".m3u8")) {
+      playlistRequests++;
+      // A live playlist with a 1 s target duration: hls.js asks for it again about every second.
+      return route.fulfill({ status: 200, contentType: "application/vnd.apple.mpegurl", headers: CORS,
+        body: "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:1\n#EXT-X-MEDIA-SEQUENCE:0\n#EXTINF:1.0,\nseg0.ts\n" });
+    }
+    return new Promise<void>(() => { /* segments never arrive */ });
+  });
+  await page.goto("/watch");
+  await channel(page, STREAMS.direct.label).click();
+  await page.getByRole("button", { name: "Load HLS player" }).click();
+  await expect.poll(() => playlistRequests, { timeout: 15_000 }).toBeGreaterThanOrEqual(3);
+
+  await page.locator("video").evaluate((video) => video.dispatchEvent(new Event("error")));
+  await expect(page.getByRole("region", { name: "Player" }).getByRole("alert")).toContainText("could not be played here");
+  const settled = playlistRequests;
+  await page.waitForTimeout(3_500);
+  expect(playlistRequests, "no more playlist requests after the failure view").toBeLessThanOrEqual(settled + 1);
+});

@@ -18,12 +18,15 @@ export function StreamVideo({ kind, url, label }: { kind: "hls" | "dash"; url: s
   const video = useRef<HTMLVideoElement>(null);
   const [failed, setFailed] = useState(false);
 
+  // `failed` is a dependency, so every way into the failure view (a library error, the video
+  // element's own error event) runs this effect's cleanup and releases the player: its
+  // requests, timers and media attachment.
   useEffect(() => {
     const element = video.current;
-    if (!element) return;
+    if (failed || !element) return;
     let disposed = false;
     let destroy = () => {};
-    // Entering the failure view also releases the player (requests, timers, media attachment).
+    // Library errors release the player right away, before the view changes.
     const fail = () => {
       if (disposed) return;
       destroy();
@@ -62,7 +65,7 @@ export function StreamVideo({ kind, url, label }: { kind: "hls" | "dash"; url: s
     }
     void start(element);
     return () => { disposed = true; destroy(); };
-  }, [kind, url]);
+  }, [kind, url, failed]);
 
   if (failed) {
     return <div className={cn(styles.playerMessage)} role="alert">

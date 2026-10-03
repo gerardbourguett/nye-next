@@ -36,6 +36,10 @@ function publicV4([a, b, c]: number[]): boolean {
   if (a === 172 && b >= 16 && b <= 31) return false;
   if (a === 192 && b === 168) return false;
   if (a === 192 && b === 0 && (c === 0 || c === 2)) return false;
+  if (a === 192 && b === 31 && c === 196) return false; // AS112-v4
+  if (a === 192 && b === 52 && c === 193) return false; // AMT
+  if (a === 192 && b === 88 && c === 99) return false; // deprecated 6to4 relay anycast
+  if (a === 192 && b === 175 && c === 48) return false; // direct delegation AS112
   if (a === 198 && (b === 18 || b === 19)) return false;
   if (a === 198 && b === 51 && c === 100) return false;
   if (a === 203 && b === 0 && c === 113) return false;
@@ -75,7 +79,7 @@ export function isPublicAddress(address: string): boolean {
   if (g[0] === 0x2001 && g[1] === 0x0db8) return false;
   if (g.slice(0, 6).every((group) => group === 0)) return embedded(g[6], g[7]); // deprecated IPv4-compatible
   if (g.slice(0, 5).every((group) => group === 0) && g[5] === 0xffff) return embedded(g[6], g[7]); // IPv4-mapped
-  if (g[0] === 0x64 && g[1] === 0xff9b) return embedded(g[6], g[7]); // NAT64
+  if (g[0] === 0x64 && g[1] === 0xff9b) return g.slice(2, 6).every((group) => group === 0) && embedded(g[6], g[7]); // NAT64 well-known prefix only (not the local-use 64:ff9b:1::/48)
   if (g[0] === 0x2002) return embedded(g[1], g[2]); // 6to4
   // Only global unicast (2000::/3) is public; everything else (site-local fec0::/10, unassigned space…) is refused.
   if ((g[0] & 0xe000) !== 0x2000) return false;
