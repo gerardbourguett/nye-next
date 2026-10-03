@@ -9,7 +9,10 @@ import styles from "@/components/streams/surface.module.css";
  * Plays a direct HLS (.m3u8) or DASH (.mpd) stream with the browser's own
  * controls. It is only mounted after the viewer asked for it, so nothing
  * contacts the stream's host before that click. The player libraries are
- * fetched on demand and never ship with the page. Safari plays HLS natively.
+ * fetched on demand and never ship with the page. HLS uses hls.js wherever
+ * it is supported, even in browsers that also claim native HLS playback
+ * (recent Chrome does): one code path, with errors it reports. The browser's
+ * own player is the fallback, for example on older iPhones.
  */
 export function StreamVideo({ kind, url, label }: { kind: "hls" | "dash"; url: string; label: string }) {
   const video = useRef<HTMLVideoElement>(null);
@@ -25,13 +28,13 @@ export function StreamVideo({ kind, url, label }: { kind: "hls" | "dash"; url: s
     async function start(target: HTMLVideoElement) {
       try {
         if (kind === "hls") {
-          if (target.canPlayType("application/vnd.apple.mpegurl")) {
-            target.src = url;
-            return;
-          }
           const { default: Hls } = await import("hls.js");
           if (disposed) return;
-          if (!Hls.isSupported()) return fail();
+          if (!Hls.isSupported()) {
+            if (target.canPlayType("application/vnd.apple.mpegurl")) target.src = url;
+            else fail();
+            return;
+          }
           const hls = new Hls();
           hls.on(Hls.Events.ERROR, (_event, data) => { if (data.fatal) fail(); });
           hls.loadSource(url);

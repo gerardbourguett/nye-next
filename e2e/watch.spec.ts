@@ -74,7 +74,16 @@ test("without provider credentials, the live status route confirms nothing", asy
   expect(await response.json()).toEqual({ live: {}, providers: { twitch: false, youtube: false } });
 });
 
+// Recent Chrome reports native HLS support; the room must still use hls.js, whose requests the suite can see.
+const claimNativeHls = (page: import("@playwright/test").Page) => page.addInitScript(() => {
+  const original = HTMLMediaElement.prototype.canPlayType;
+  HTMLMediaElement.prototype.canPlayType = function (type: string) {
+    return /mpegurl/i.test(type) ? "maybe" : original.call(this, type);
+  };
+});
+
 test("a direct HLS stream shows its host, contacts nothing until loaded, then plays in the room", async ({ page }) => {
+  await claimNativeHls(page);
   const requests: string[] = [];
   await page.route("https://streams.example.test/**", (route) => {
     requests.push(route.request().url());
@@ -93,6 +102,7 @@ test("a direct HLS stream shows its host, contacts nothing until loaded, then pl
 });
 
 test("when a direct stream cannot play, the room says so and offers its address", async ({ page, consoleErrors }) => {
+  await claimNativeHls(page);
   await page.route("https://streams.example.test/**", (route) => route.fulfill({ status: 404, headers: CORS, body: "gone" }));
   await page.goto("/watch");
   await channel(page, STREAMS.direct.label).click();

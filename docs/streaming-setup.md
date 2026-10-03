@@ -328,7 +328,8 @@ Además de Twitch y YouTube, cada opción puede ser:
 
 - **HLS** (`.m3u8`) o **DASH** (`.mpd`): una URL HTTPS que se reproduce dentro de la
   sala con el reproductor del navegador (hls.js / dash.js, que se descargan solo al
-  pulsar “Load player”; Safari reproduce HLS de forma nativa). Como en los demás
+  pulsar “Load player”; el reproductor nativo del navegador solo se usa si hls.js no
+  es compatible, por ejemplo en iPhone antiguos). Como en los demás
   proveedores, nada se contacta antes de ese clic, y el aviso indica a qué servidor
   se conectará el navegador.
 - **Web link**: cualquier página HTTPS. Nunca se incrusta; se abre en otra pestaña.
