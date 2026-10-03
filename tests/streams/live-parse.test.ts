@@ -56,3 +56,26 @@ test("chat embeds are built from validated IDs and hostnames only", () => {
   assert.throws(() => twitchChatUrl(MAIN_CHANNEL, "evil.com/x", false));
   assert.throws(() => youtubeChatUrl("short", "example.com"));
 });
+
+import { readHlsPlaylist, readMpd } from "../../lib/streams/live-parse";
+
+test("HLS playlists: live until ended, masters name a variant, anything else is invalid", () => {
+  const media = (extra: string) => `#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:6\n#EXT-X-MEDIA-SEQUENCE:100\n#EXTINF:6.0,\nseg100.ts\n${extra}`;
+  assert.deepEqual(readHlsPlaylist(media("")), { state: "live" });
+  assert.deepEqual(readHlsPlaylist(media("#EXT-X-ENDLIST\n")), { state: "ended" });
+  assert.deepEqual(readHlsPlaylist(media("").replace("#EXT-X-VERSION:3", "#EXT-X-PLAYLIST-TYPE:VOD")), { state: "ended" });
+  assert.deepEqual(readHlsPlaylist(`﻿#EXTM3U\r\n#EXT-X-STREAM-INF:BANDWIDTH=800000\r\nlow/index.m3u8\r\n#EXT-X-STREAM-INF:BANDWIDTH=2000000\r\nhigh/index.m3u8\r\n`),
+    { state: "master", variant: "low/index.m3u8" });
+  for (const text of ["", "<html>not a playlist</html>", "#EXTM3U\n", "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\n", "#EXTM3U\n#EXT-X-VERSION:3\n"]) {
+    assert.deepEqual(readHlsPlaylist(text), { state: "invalid" }, JSON.stringify(text));
+  }
+});
+
+test("DASH manifests: dynamic means live, static is a recording, other text is invalid", () => {
+  assert.deepEqual(readMpd('<?xml version="1.0"?><MPD xmlns="urn:mpeg:dash:schema:mpd:2011" type="dynamic" minimumUpdatePeriod="PT2S"></MPD>'), { state: "live" });
+  assert.deepEqual(readMpd('<MPD type="static" mediaPresentationDuration="PT1H"></MPD>'), { state: "ended" });
+  assert.deepEqual(readMpd("<mpd:MPD type='dynamic'></mpd:MPD>"), { state: "live" });
+  assert.deepEqual(readMpd('<MPD></MPD>'), { state: "ended" });
+  assert.deepEqual(readMpd("<html></html>"), { state: "invalid" });
+  assert.deepEqual(readMpd(""), { state: "invalid" });
+});

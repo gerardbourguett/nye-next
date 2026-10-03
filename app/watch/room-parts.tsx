@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { cn } from "@/lib/utils";
 import {
-  formatDuration, MAIN_CHANNEL, optionKey, providerName, providerUrl, twitchChatUrl, youtubeChatUrl,
+  formatDuration, MAIN_CHANNEL, optionKey, providerName, providerUrl, streamHost, twitchChatUrl, youtubeChatUrl,
   type Slot, type StreamOption,
 } from "@/lib/streams/domain";
 import type { LiveInfo } from "@/lib/streams/live-parse";
@@ -18,8 +18,24 @@ export type Browser = { hostname: string; secure: boolean };
 export const localTime = (iso: string) => new Date(iso).toLocaleString(undefined, {
   month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", timeZoneName: "short",
 });
-export const source = (option: StreamOption) => option.zone
-  ? `${providerName(option.provider)} · ${cityFromZoneName(option.zone)}` : providerName(option.provider);
+export const source = (option: StreamOption) =>
+  [providerName(option.provider), streamHost(option), option.zone && cityFromZoneName(option.zone)].filter(Boolean).join(" · ");
+
+/** Direct streams (HLS, DASH) have no page to open, so their address is copied instead. */
+export function CopyAddress({ address }: { address: string }) {
+  const [copied, setCopied] = useState(false);
+  return <button type="button" className={styles.button} onClick={() => {
+    navigator.clipboard?.writeText(address).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2_000);
+    }, () => undefined);
+  }}>{copied ? "Address copied" : "Copy stream address"}</button>;
+}
+
+/** A card opens the provider's page; direct streams open in the room, which can play them. */
+const cardLink = (slot: Slot, stream: StreamOption) => stream.provider === "hls" || stream.provider === "dash"
+  ? { href: `/watch?${new URLSearchParams({ slot: slot.id, stream: optionKey(stream) })}` }
+  : { href: providerUrl(stream), target: "_blank", rel: "noopener noreferrer" };
 
 const compact = new Intl.NumberFormat(undefined, { notation: "compact", maximumFractionDigits: 1 });
 
@@ -183,7 +199,7 @@ export function ComingUp({ upcoming, live, loaded }: { upcoming: Slot[]; live: L
       </p>
       <h3>{item.title}</h3>
       <ul className={styles.cardStreams}>{item.options.map((stream) => <li key={optionKey(stream)}>
-        <a href={providerUrl(stream)} target="_blank" rel="noopener noreferrer" className={styles.cardStream}>
+        <a {...cardLink(item, stream)} className={styles.cardStream}>
           <Avatar option={stream} info={live[optionKey(stream)]} />
           <span className={styles.channelText}>
             <span className={styles.channelName}>{stream.label}</span>

@@ -3,14 +3,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTheme } from "next-themes";
 import { activeSlot, decodeSlots, embedUrl, HOUR_MS, MAIN_CHANNEL, optionKey, providerName, providerUrl, reconcilePlayback,
-  selectedOption, type PlaybackState, type Slot, type StreamOption } from "@/lib/streams/domain";
+  selectedOption, streamHost, type PlaybackState, type Slot, type StreamOption } from "@/lib/streams/domain";
 import { cn } from "@/lib/utils";
 import styles from "@/components/streams/surface.module.css";
-import { ChannelRail, ChatPanel, ComingUp, localTime, source, StreamInfo, type Browser, type LiveMap } from "./room-parts";
+import { ChannelRail, ChatPanel, ComingUp, CopyAddress, localTime, source, StreamInfo, type Browser, type LiveMap } from "./room-parts";
+import { StreamVideo } from "./stream-video";
 
 /** `askedFor` is the deep-linked slot id this snapshot was fetched with, if any. */
 type Snapshot = { slots: Slot[]; serverNow: number; receivedAt: number; askedFor: string | null };
 const LIVE_POLL_MS = 60_000;
+/** Stream addresses are keys too, so one status request stays well inside URL limits. */
+const MAX_LIVE_KEY_CHARS = 6_000;
 
 type Selection = NonNullable<PlaybackState["selection"]>;
 
@@ -91,8 +94,10 @@ export function ViewingRoom({ requested: initialRequest = null }: { requested?: 
   const upcoming = snapshot && now !== null ? snapshot.slots.filter((item) =>
     Date.parse(item.starts_at) > now && Date.parse(item.starts_at) <= now + 14 * 24 * HOUR_MS) : [];
   const ended = snapshot && now !== null && snapshot.slots.some((item) => Date.parse(item.ends_at) <= now);
-  const canEmbed = option && browser && (option.provider !== "twitch" ? width >= 200 :
+  // `link` sources are web pages: never embedded, only opened.
+  const canEmbed = option && browser && (option.provider === "link" ? false : option.provider !== "twitch" ? width >= 200 :
     width >= 400 && browser.secure && /^[a-zA-Z0-9.-]+$/.test(browser.hostname));
+  const direct = option?.provider === "hls" || option?.provider === "dash" ? option.provider : null;
   // A deep link waits for its hour, then becomes the selection (never a load:
   // players still start only on an explicit click). A slot missing from the
   // snapshot may still be beyond its 14-day window, so only a slot that is
@@ -128,7 +133,14 @@ export function ViewingRoom({ requested: initialRequest = null }: { requested?: 
     for (const stream of item.options) liveKeySet.add(optionKey(stream));
   }
   // Capped in priority order (main channel, this slot, then cards) before sorting.
-  const liveKeys = [...liveKeySet].slice(0, 24).sort().join(",");
+  const prioritized: string[] = [];
+  let keyChars = 0;
+  for (const key of liveKeySet) {
+    if (prioritized.length >= 24 || keyChars + key.length + 1 > MAX_LIVE_KEY_CHARS) break;
+    prioritized.push(key);
+    keyChars += key.length + 1;
+  }
+  const liveKeys = prioritized.sort().join(",");
   useEffect(() => {
     const controller = new AbortController();
     const load = async () => {
@@ -174,14 +186,18 @@ export function ViewingRoom({ requested: initialRequest = null }: { requested?: 
       <section className={styles.stage} aria-label="Player">
         <div className={styles.player} ref={playerColumn}>
           {option && canEmbed && loadedPlayer === playerKey && browser ?
-            <iframe key={playerKey} src={embedUrl(option, browser.hostname)} title={`${option.label} on ${providerName(option.provider)}`}
-              allow="fullscreen; encrypted-media; picture-in-picture" allowFullScreen referrerPolicy="strict-origin-when-cross-origin" /> :
+            direct ? <StreamVideo key={playerKey} kind={direct} url={option.id} label={option.label} /> :
+              <iframe key={playerKey} src={embedUrl(option, browser.hostname)} title={`${option.label} on ${providerName(option.provider)}`}
+                allow="fullscreen; encrypted-media; picture-in-picture" allowFullScreen referrerPolicy="strict-origin-when-cross-origin" /> :
             <div className={cn(styles.playerMessage, info?.thumbnail && styles.poster)}>
               {info?.thumbnail && option && canEmbed &&
                 // eslint-disable-next-line @next/next/no-img-element -- the provider's own live preview, shown until the player loads
                 <img className={styles.posterImage} src={info.thumbnail} alt="" referrerPolicy="no-referrer" />}
               {!slot && <h2 id="scheduled-now" aria-live="polite">{emptyTitle}</h2>}
-              <p>{option ? canEmbed ? `Load ${providerName(option.provider)}'s player, then press play. Loading connects your browser to ${providerName(option.provider)}.`
+              <p>{option ? canEmbed
+                ? direct ? `Load the ${providerName(option.provider)} stream, then press play. Loading connects your browser to ${streamHost(option)}, which this site does not run.`
+                  : `Load ${providerName(option.provider)}'s player, then press play. Loading connects your browser to ${providerName(option.provider)}.`
+                : option.provider === "link" ? `This source cannot be shown inside the room. Open ${streamHost(option)} in a new tab.`
                 : option.provider === "twitch" ? "Twitch needs HTTPS and at least 400 pixels of player width. Open it directly, or use a wider HTTPS window."
                   : "Open the video directly, or use a wider window to load the player."
                 : !snapshot ? error ? "Please try again shortly. You can still visit vanderfondi on Twitch." : "Checking published slots."
@@ -195,10 +211,12 @@ export function ViewingRoom({ requested: initialRequest = null }: { requested?: 
         </div>
         {slot && option && <StreamInfo option={option} info={info} slot={slot} now={now} />}
         {option && <div className={styles.actions}>
-          <a className={styles.button} href={providerUrl(option)} target="_blank" rel="noopener noreferrer">Open on {providerName(option.provider)}</a>
+          {direct ? <CopyAddress address={option.id} />
+            : <a className={cn(styles.button, option.provider === "link" && styles.primary)} href={providerUrl(option)} target="_blank" rel="noopener noreferrer">
+              {option.provider === "link" ? `Open ${streamHost(option)}` : `Open on ${providerName(option.provider)}`}</a>}
           {loadedPlayer === playerKey && <button className={styles.button} onClick={() => setPlayback((current) => ({ ...current, loadedPlayer: null }))}>Close player</button>}
         </div>}
-        <p className={cn(styles.muted, styles.fineprint)}>Live, offline and viewer counts come from the provider when it can confirm them; otherwise a stream is only scheduled. If playback fails, use the direct link.</p>
+        <p className={cn(styles.muted, styles.fineprint)}>Live, offline and viewer counts come from the provider when it can confirm them; otherwise a stream is only scheduled. For HLS and DASH streams, Live means the stream&rsquo;s own playlist is running. If playback fails, use the direct link or copy the address into a player such as VLC.</p>
       </section>
       <ChatPanel option={option} info={info} browser={browser} dark={resolvedTheme === "dark"} />
     </div>

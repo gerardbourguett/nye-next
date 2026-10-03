@@ -221,3 +221,75 @@ test("deep links only select well-formed slot and stream pairs", () => {
     assert.equal(parseSelection(slotId, key), null, String(key));
   }
 });
+
+import { isUrlProvider, normalizeStreamUrl, streamHost } from "../../lib/streams/domain";
+
+// The same cases run against the SQL backstop in 202610040001_url_stream_sources.sql.
+const URL_CASES: [provider: "hls" | "dash" | "link", id: string, ok: boolean][] = [
+  ["hls", "https://cdn.example.com/live/index.m3u8", true],
+  ["hls", "https://cdn.example.com:8443/live/index.m3u8?token=abc&e=1", true],
+  ["hls", "https://a.b.example.co.uk/x/master.m3u8", true],
+  ["hls", "https://cdn.example.com/live/index.mpd", false],
+  ["hls", "https://cdn.example.com/index.m3u8.txt", false],
+  ["hls", "https://cdn.example.com/?u=a.m3u8", false],
+  ["hls", "http://cdn.example.com/index.m3u8", false],
+  ["hls", "https://127.0.0.1/index.m3u8", false],
+  ["hls", "https://10.0.0.5:8443/index.m3u8", false],
+  ["hls", "https://localhost/index.m3u8", false],
+  ["hls", "https://printer.local/index.m3u8", false],
+  ["hls", "https://app.internal/index.m3u8", false],
+  ["hls", "https://nas.home.arpa/index.m3u8", false],
+  ["hls", "https://user:pw@cdn.example.com/index.m3u8", false],
+  ["hls", "https://user@cdn.example.com/index.m3u8", false],
+  ["hls", "https://cdn.example.com/in dex.m3u8", false],
+  ["hls", "https://cdn.example.com/a,b.m3u8", false],
+  ["hls", "https://cdn.example.com/index.m3u8#frag", false],
+  ["hls", "https://cdn.example.com/it's.m3u8", false],
+  ["hls", "https://[::1]/index.m3u8", false],
+  ["hls", "https://singlelabel/index.m3u8", false],
+  ["dash", "https://cdn.example.com/live/manifest.mpd", true],
+  ["dash", "https://cdn.example.com/live/manifest.m3u8", false],
+  ["link", "https://www.example.com/watch/live", true],
+  ["link", "http://www.example.com/", false],
+  ["link", "https://192.168.1.10/", false],
+  ["link", "javascript:alert(1)", false],
+];
+
+test("stream URLs: HTTPS, public host, matching extension, no credentials, separators or fragments", () => {
+  for (const [provider, id, ok] of URL_CASES) {
+    assert.equal(normalizeStreamUrl(provider, id) !== null, ok, `${provider} ${id}`);
+  }
+  assert.equal(normalizeStreamUrl("link", `https://example.com/${"a".repeat(400)}`), null);
+  assert.equal(normalizeStreamUrl("link", "https://cdn.example.com:22/x"), null, "privileged ports are refused");
+  assert.equal(normalizeStreamUrl("link", "https://cdn.example.com:8443/x"), "https://cdn.example.com:8443/x");
+});
+
+test("stream URLs canonicalise, and only canonical forms are valid IDs", () => {
+  assert.equal(parseStreamSource("hls", "  https://CDN.Example.com/Live/Index.M3U8?x=1  "), "https://cdn.example.com/Live/Index.M3U8?x=1");
+  assert.equal(parseStreamSource("link", "https://www.example.com"), "https://www.example.com/");
+  assert.throws(() => parseStreamSource("hls", "https://cdn.example.com/index.mpd"), /\.m3u8/);
+  assert.throws(() => parseStreamSource("dash", "https://cdn.example.com/index.m3u8"), /\.mpd/);
+  assert.throws(() => parseStreamSource("link", "http://www.example.com/"), /HTTPS/);
+  assert.throws(() => validateOptions([{ provider: "hls", id: "https://CDN.example.com/a.m3u8", label: "Not canonical" }]));
+});
+
+test("URL options validate, deduplicate, resolve addresses and survive deep links", () => {
+  const hls: StreamOption = { provider: "hls", id: "https://cdn.example.com/live/index.m3u8?t=1", label: "Sydney feed", zone: "Australia/Sydney" };
+  const link: StreamOption = { provider: "link", id: "https://tv.example.com/live", label: "TV page" };
+  assert.deepEqual(validateOptions([hls, link, twitch]), [hls, link, twitch]);
+  assert.throws(() => validateOptions([hls, { ...hls, label: "Same address" }]));
+  assert.equal(providerUrl(hls), hls.id);
+  assert.equal(providerName("hls"), "HLS");
+  assert.equal(providerName("dash"), "DASH");
+  assert.equal(providerName("link"), "Web");
+  assert.equal(streamHost(hls), "cdn.example.com");
+  assert.equal(streamHost(twitch), null);
+  assert.throws(() => embedUrl(hls, "example.com"), /video player/);
+  assert.equal(isUrlProvider("hls") && isUrlProvider("link") && !isUrlProvider("twitch"), true);
+  const key = optionKey(hls);
+  assert.deepEqual(parseSelection(slot.id, key), { slotId: slot.id, key });
+  const roundTrip = new URLSearchParams(new URLSearchParams({ slot: slot.id, stream: key }).toString()).get("stream");
+  assert.equal(roundTrip, key);
+  assert.equal(parseSelection(slot.id, "hls:https://127.0.0.1/a.m3u8"), null);
+  assert.equal(key.includes(","), false, "keys stay safe in comma-separated status requests");
+});

@@ -7,6 +7,8 @@ import { adminAccess } from "@/lib/streams/server";
 import { runAdminLogin } from "@/lib/streams/admin-login";
 import { parseStreamSource, parseZone, PROVIDERS, UUID, validateOptions, validateWindow, type StreamOption } from "@/lib/streams/domain";
 import { validateLocalInstant } from "@/lib/streams/time";
+import { parseM3u, type ListedChannel } from "@/lib/streams/m3u";
+import { fetchPublicText } from "@/lib/streams/safe-fetch";
 
 export type ActionResult = { ok: boolean; message: string };
 const denied: ActionResult = { ok: false, message: "Admin access could not be verified. Sign in again or contact the owner." };
@@ -71,7 +73,7 @@ export async function saveSlot(form: FormData): Promise<ActionResult> {
     const options: StreamOption[] = [];
     for (let index = 0; index < count; index++) {
       const provider = PROVIDERS.find((item) => item === field(form, `provider_${index}`));
-      if (!provider) throw new Error("Choose Twitch, a YouTube video, or a YouTube channel.");
+      if (!provider) throw new Error("Choose a provider for every stream option.");
       const option: StreamOption = { provider, id: parseStreamSource(provider, field(form, `source_${index}`)), label: field(form, `label_${index}`).trim() };
       const zone = parseZone(field(form, `zone_${index}`));
       if (zone) option.zone = zone;
@@ -97,6 +99,46 @@ export async function saveSlot(form: FormData): Promise<ActionResult> {
   revalidatePath("/watch");
   revalidatePath("/road-to");
   return { ok: true, message: payload.published ? "Slot published. The room refreshes within 30 seconds." : "Draft saved. It is not visible in the room." };
+}
+
+export type ChannelListResult = { ok: boolean; message: string; channels?: ListedChannel[] };
+const LIST_BYTES = 8 * 1024 * 1024;
+
+/**
+ * Reads an IPTV-style `.m3u` list from an HTTPS address or pasted text, so
+ * channels can be picked instead of typed. Nothing is stored: the admin
+ * chooses entries, and only those go into a slot. The server reads the
+ * address (public HTTPS hosts only, size and time limited).
+ */
+export async function loadChannelList(form: FormData): Promise<ChannelListResult> {
+  const { client, status } = await adminAccess();
+  if (status !== "admin" || !client) return denied;
+  const input = field(form, "list").trim();
+  if (!input) return { ok: false, message: "Paste a list or enter its HTTPS address." };
+  let text = input;
+  let base: string | undefined;
+  if (/^[a-z][a-z0-9+.-]*:\/\/\S+$/i.test(input)) {
+    if (!input.startsWith("https://")) return { ok: false, message: "A list address must use HTTPS." };
+    try {
+      const response = await fetchPublicText(input, 10_000, LIST_BYTES);
+      if (response.status !== 200) return { ok: false, message: `The list's server answered ${response.status}. Check the address, or paste the list instead.` };
+      text = response.text;
+      base = input;
+    } catch {
+      return { ok: false, message: "The list could not be read. It must be a public HTTPS address under 8 MB; otherwise paste its text instead." };
+    }
+  }
+  const parsed = parseM3u(text, base);
+  if (parsed.isStream) {
+    return { ok: false, message: "That address is a stream, not a list of channels. Use it directly as an HLS stream option." };
+  }
+  if (!parsed.channels.length) return { ok: false, message: "No channels were found. A list starts with #EXTM3U and has #EXTINF lines." };
+  const usable = parsed.channels.filter((channel) => channel.provider).length;
+  return {
+    ok: true,
+    message: `${parsed.channels.length} entries read; ${usable} can be used in a slot.`,
+    channels: parsed.channels,
+  };
 }
 
 export async function deleteSlot(form: FormData): Promise<ActionResult> {

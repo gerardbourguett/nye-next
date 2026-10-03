@@ -34,6 +34,12 @@ credenciales ni una programación de ejemplo.
    Amplía el máximo de esa regla de 7 a 92 días, para dejar un ensayo al aire hasta
    Año Nuevo. Las franjas existentes siguen siendo válidas. Mientras no se aplique,
    guardar una franja de más de 7 días falla con “Slot not saved”.
+   Finalmente, ejecute una vez
+   [`202610040001_url_stream_sources.sql`](../supabase/migrations/202610040001_url_stream_sources.sql).
+   Acepta los proveedores `hls`, `dash` y `link`, cuyo identificador es una URL HTTPS
+   (véase “Otras fuentes” más abajo); crea la función `valid_stream_url` y reemplaza
+   `valid_stream_options`. Todas las filas existentes siguen siendo válidas. Mientras
+   no se aplique, guardar una opción HLS, DASH o enlace web falla con “Slot not saved”.
 3. En **Authentication → Providers → Email**, habilite el inicio de sesión con correo
    electrónico y contraseña. En la configuración de Auth,
    **desactive “Allow new users to sign up”**. Mantenga esa opción desactivada;
@@ -315,6 +321,44 @@ no use el prefijo `NEXT_PUBLIC_`. Configúrelas en `.env.local` y en Vercel
 3. Los canales de YouTube (`youtube_channel`) se detectan por su feed público de
    subidas: si el directo no aparece entre los 15 videos más recientes del feed,
    se mostrará como “Offline”.
+
+### Otras fuentes: HLS, DASH, enlaces y listas .m3u
+
+Además de Twitch y YouTube, cada opción puede ser:
+
+- **HLS** (`.m3u8`) o **DASH** (`.mpd`): una URL HTTPS que se reproduce dentro de la
+  sala con el reproductor del navegador (hls.js / dash.js, que se descargan solo al
+  pulsar “Load player”; Safari reproduce HLS de forma nativa). Como en los demás
+  proveedores, nada se contacta antes de ese clic, y el aviso indica a qué servidor
+  se conectará el navegador.
+- **Web link**: cualquier página HTTPS. Nunca se incrusta; se abre en otra pestaña.
+  Sirve para sitios que bloquean la incrustación.
+- **Lista .m3u** (panel “Pick channels from a list” del administrador): pegue una lista
+  IPTV o su dirección HTTPS, busque el canal y elija en qué opción del bloque se
+  guarda. La lista no se almacena; solo lo que usted elige.
+
+Reglas y límites que conviene conocer:
+
+1. **Una URL `blob:` no sirve**: solo existe dentro de la pestaña que la creó. Busque
+   en DevTools → Network el `.m3u8` o `.mpd` real.
+2. Solo HTTPS, con nombre de dominio público (no IP, `localhost`, `.local`,
+   `.internal`…), sin usuario ni contraseña en la URL, sin espacios ni comas, de
+   hasta 400 caracteres y con puerto 1024 o superior. Las entradas HTTP de una lista
+   se omiten porque un sitio HTTPS no puede reproducirlas.
+3. **La URL se guarda en el cronograma público**: cualquier visitante puede verla.
+   No use direcciones que lleven contraseña; las firmadas o con token caducan y
+   conviene cargarlas cerca de la fecha.
+4. **CORS**: si el servidor del stream no permite que otros sitios lo reproduzcan, el
+   reproductor falla aunque la URL funcione en VLC. La sala lo avisa y ofrece copiar
+   la dirección. El video nunca pasa por este servidor.
+5. **Estado “Live”**: para HLS y DASH, el servidor lee la lista de reproducción o el
+   manifiesto (solo hosts públicos, con límite de tamaño y tiempo, caché de 60 s):
+   es “Live” si la lista está en marcha y no ha terminado (HLS sin `#EXT-X-ENDLIST`,
+   DASH con `type="dynamic"`), y “Offline” solo si el servidor responde 404/410.
+   Una grabación, un error o un host inalcanzable quedan como “Scheduled”. No hay
+   cantidad de espectadores ni chat.
+6. Los derechos de retransmitir una señal ajena son responsabilidad de quien la
+   programa.
 
 El chat principal siempre es el de `vanderfondi` en Twitch. Si el stream elegido
 es de Twitch o un video de YouTube en vivo, su chat aparece como segunda pestaña.

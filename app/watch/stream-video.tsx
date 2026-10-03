@@ -1,0 +1,62 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+
+import { cn } from "@/lib/utils";
+import styles from "@/components/streams/surface.module.css";
+
+/**
+ * Plays a direct HLS (.m3u8) or DASH (.mpd) stream with the browser's own
+ * controls. It is only mounted after the viewer asked for it, so nothing
+ * contacts the stream's host before that click. The player libraries are
+ * fetched on demand and never ship with the page. Safari plays HLS natively.
+ */
+export function StreamVideo({ kind, url, label }: { kind: "hls" | "dash"; url: string; label: string }) {
+  const video = useRef<HTMLVideoElement>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    const element = video.current;
+    if (!element) return;
+    let disposed = false;
+    let destroy = () => {};
+    const fail = () => { if (!disposed) setFailed(true); };
+
+    async function start(target: HTMLVideoElement) {
+      try {
+        if (kind === "hls") {
+          if (target.canPlayType("application/vnd.apple.mpegurl")) {
+            target.src = url;
+            return;
+          }
+          const { default: Hls } = await import("hls.js");
+          if (disposed) return;
+          if (!Hls.isSupported()) return fail();
+          const hls = new Hls();
+          hls.on(Hls.Events.ERROR, (_event, data) => { if (data.fatal) fail(); });
+          hls.loadSource(url);
+          hls.attachMedia(target);
+          destroy = () => hls.destroy();
+        } else {
+          const { MediaPlayer } = await import("dashjs");
+          if (disposed) return;
+          const player = MediaPlayer().create();
+          // Errors after playback began (a missed segment) are the player's to retry.
+          player.on(MediaPlayer.events.ERROR, () => { if (target.readyState === 0) fail(); });
+          player.initialize(target, url, false);
+          destroy = () => player.destroy();
+        }
+      } catch { fail(); }
+    }
+    void start(element);
+    return () => { disposed = true; destroy(); };
+  }, [kind, url]);
+
+  if (failed) {
+    return <div className={cn(styles.playerMessage)} role="alert">
+      <p>This stream could not be played here. Its server may not allow other sites to play it, the address may have expired, or
+        the format may be unsupported. Copy the stream address below into a player such as VLC instead.</p>
+    </div>;
+  }
+  return <video ref={video} className={styles.video} controls playsInline preload="none" aria-label={label} onError={() => setFailed(true)} />;
+}

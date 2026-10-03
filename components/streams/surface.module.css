@@ -121,6 +121,11 @@
 .card { display: grid; align-content: start; gap: 0.5rem; padding: 1rem; border: 1px solid var(--border); border-radius: 0.5rem; }
 .card h3 { overflow-wrap: anywhere; }
 .cardStreams { display: grid; gap: 0.25rem; padding: 0; margin: 0; list-style: none; }
+/* Admin: choosing a channel from an imported list */
+.importList { display: grid; margin: 0; padding: 0; max-height: 18rem; overflow: auto; list-style: none; border: 1px solid var(--border); }
+.importList li + li { border-top: 1px solid var(--border); }
+.importChoice { display: grid; width: 100%; gap: 0.125rem; min-height: 2.75rem; padding: 0.5rem 0.75rem; text-align: left; color: inherit; background: transparent; border: 0; cursor: pointer; }
+.importChoice:hover, .importChoice:focus-visible { background: var(--muted); }
 .cardStream { display: flex; align-items: center; gap: 0.625rem; min-height: 2.75rem; color: inherit; }
 .cardStream:hover .channelName { text-decoration: underline; }
 .player {
@@ -133,6 +138,7 @@
   border: 1px solid var(--border);
 }
 .player iframe { display: block; width: 100%; height: 100%; min-height: 300px; border: 0; }
+.video { display: block; width: 100%; height: 100%; min-height: 300px; background: #000; }
 .playerMessage { max-width: 42ch; padding: 1.5rem; text-align: center; }
 .playerMessage p { margin-bottom: 1rem; line-height: 1.65; }
 .button {
@@ -180,7 +186,8 @@
 :global(.dark) .field input, :global(.dark) .field select { color-scheme: dark; }
 .fields { display: grid; gap: 1.25rem; }
 .optionEditor { display: grid; gap: 1rem; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border); }
-.optionGrid { display: grid; grid-template-columns: 9rem minmax(0, 1fr); gap: 1rem; }
+.optionGrid { display: grid; grid-template-columns: 12rem minmax(0, 1fr); gap: 1rem; }
+.durationGrid { display: grid; grid-template-columns: repeat(3, 7rem); gap: 1rem; }
 .check { display: flex; align-items: center; gap: 0.75rem; min-height: 2.75rem; line-height: 1.5; }
 .check input { width: 1.125rem; height: 1.125rem; accent-color: var(--foreground); }
 .delete { margin-top: 1rem; }
@@ -197,6 +204,7 @@
   .surface { width: calc(100% - 2rem); }
   .intro h1 { font-size: 2.75rem; }
   .row, .optionGrid { grid-template-columns: minmax(0, 1fr); gap: 0.75rem; }
+  .durationGrid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.75rem; }
   .player { aspect-ratio: auto; }
   .streamInfo { grid-template-columns: auto minmax(0, 1fr); }
   .streamStats { grid-column: 1 / -1; justify-items: start; }

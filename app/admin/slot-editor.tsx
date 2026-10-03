@@ -4,7 +4,9 @@ import Link from "next/link";
 import { useEffect, useId, useState, useTransition } from "react";
 import { formatDuration, MAX_SLOT_DAYS, MAX_SLOT_MS, MIN_SLOT_MS, SLOT_LENGTHS, optionKey, providerName, providerUrl, type Provider, type Slot, type StreamOption } from "@/lib/streams/domain";
 import { localToUtc, toLocalInput } from "@/lib/streams/time";
+import type { ListedChannel } from "@/lib/streams/m3u";
 import { saveSlot, type ActionResult } from "./actions";
+import { ChannelImport } from "./channel-import";
 import styles from "@/components/streams/surface.module.css";
 
 type OptionInput = { provider: Provider; source: string; label: string; place: string };
@@ -17,6 +19,9 @@ const SOURCE_COPY: Record<Provider, { label: string; note: string }> = {
   twitch: { label: "Channel URL or name", note: "An HTTPS twitch.tv channel URL or channel name. No clips or VODs." },
   youtube: { label: "Video URL or video ID", note: "An HTTPS YouTube watch, live, shorts, or youtu.be URL, or an 11-character video ID. No channels or playlists." },
   youtube_channel: { label: "Channel URL or channel ID", note: "Plays whatever this channel has live, useful when the video ID is only known on the day. Use youtube.com/channel/UC… or the UC… ID; @handles are not accepted." },
+  hls: { label: "HLS playlist address (.m3u8)", note: "An HTTPS address ending in .m3u8, plays in the room. It is saved in the public schedule, so avoid addresses with passwords; signed addresses can expire. A blob: address from a player cannot be used: find the .m3u8 in your browser's network tab." },
+  dash: { label: "DASH manifest address (.mpd)", note: "An HTTPS address ending in .mpd, plays in the room. It is saved in the public schedule, so avoid addresses with passwords; signed addresses can expire." },
+  link: { label: "Page address", note: "Any HTTPS page. It opens in a new tab and never plays inside the room, so it also suits sites that block embedding." },
 };
 
 /**
@@ -59,6 +64,9 @@ export function SlotEditor({ slot, places, saved }: { slot?: Slot; places: Place
     } catch { /* Validation is reported on submission; partial input stays quiet. */ }
   }
 
+  const useListed = (index: number, channel: ListedChannel) => {
+    if (channel.provider) updateOption(index, { provider: channel.provider, source: channel.url, label: channel.name.trim().slice(0, 120) });
+  };
   const updateOption = (index: number, change: Partial<OptionInput>) => {
     setOptions((current) => current.map((option, position) => position === index ? { ...option, ...change } : option));
   };
@@ -67,6 +75,7 @@ export function SlotEditor({ slot, places, saved }: { slot?: Slot; places: Place
     <div className={styles.sectionHeading}><h2 id="slot-editor-heading">{slot ? "Edit slot" : "Create a slot"}</h2>
       {slot && <Link href="/admin">Cancel editing</Link>}</div>
     <p className={styles.muted}>Slots last one hour by default and can run from {SLOT_LENGTHS}, for example a rehearsal left on air until New Year. Published slots cannot overlap. Option order sets the default stream first.</p>
+    <ChannelImport optionCount={options.length} onUse={useListed} />
     <datalist id={`${prefix}-places`}>{places.map((place) => <option key={place.zoneName} value={place.zoneName}>{place.label}</option>)}</datalist>
     <form className={styles.form} onSubmit={(event) => {
       event.preventDefault();
@@ -108,7 +117,7 @@ export function SlotEditor({ slot, places, saved }: { slot?: Slot; places: Place
         </div>
         <fieldset className={styles.optionEditor}>
           <legend>Duration</legend>
-          <div className={styles.optionGrid}>
+          <div className={styles.durationGrid}>
             <div className={styles.field}><label htmlFor={`${prefix}-days`}>Days</label>
               <input id={`${prefix}-days`} name="duration_days" type="number" inputMode="numeric" min={0} max={MAX_SLOT_DAYS} step={1}
                 value={durationDays} onChange={(event) => setDurationDays(event.target.value)} required /></div>
@@ -139,6 +148,8 @@ export function SlotEditor({ slot, places, saved }: { slot?: Slot; places: Place
               <select id={`${prefix}-provider-${index}`} name={`provider_${index}`} value={option.provider} onChange={(event) => updateOption(index, { provider: event.target.value as Provider })}>
                 <option value="twitch">Twitch</option><option value="youtube">YouTube video</option>
                 <option value="youtube_channel">YouTube channel (live)</option>
+                <option value="hls">HLS stream</option><option value="dash">DASH stream</option>
+                <option value="link">Web link</option>
               </select></div>
             <div className={styles.field}><label htmlFor={`${prefix}-source-${index}`}>{SOURCE_COPY[option.provider].label}</label>
               <input id={`${prefix}-source-${index}`} name={`source_${index}`} value={option.source} onChange={(event) => updateOption(index, { source: event.target.value })} maxLength={500} required

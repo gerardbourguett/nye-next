@@ -83,3 +83,31 @@ export function parseChannelFeed(xml: string): string[] {
   }
   return ids.slice(0, 15);
 }
+
+/** What a stream's own playlist says: running now, finished, or not a playlist at all. */
+export type PlaylistReading = { state: "live" | "ended" | "invalid" } | { state: "master"; variant: string };
+
+/**
+ * An HLS playlist. A media playlist is live until it carries `#EXT-X-ENDLIST`
+ * (or declares itself VOD); a master playlist only lists variants, so it
+ * returns the first one to be read in turn.
+ */
+export function readHlsPlaylist(text: string): PlaylistReading {
+  const lines = text.replace(/^﻿/, "").split(/\r?\n/).map((line) => line.trim());
+  if (lines[0] !== "#EXTM3U") return { state: "invalid" };
+  const tag = lines.findIndex((line) => line.startsWith("#EXT-X-STREAM-INF"));
+  if (tag >= 0) {
+    const variant = lines.slice(tag + 1).find((line) => line && !line.startsWith("#"));
+    return variant ? { state: "master", variant } : { state: "invalid" };
+  }
+  if (!lines.some((line) => line.startsWith("#EXTINF") || line.startsWith("#EXT-X-TARGETDURATION"))) return { state: "invalid" };
+  return lines.some((line) => line === "#EXT-X-ENDLIST" || line === "#EXT-X-PLAYLIST-TYPE:VOD")
+    ? { state: "ended" } : { state: "live" };
+}
+
+/** A DASH manifest: `type="dynamic"` on the MPD element means a live presentation. */
+export function readMpd(text: string): { state: "live" | "ended" | "invalid" } {
+  const root = /<(?:[A-Za-z0-9_-]+:)?MPD\b[^>]*>/.exec(text);
+  if (!root) return { state: "invalid" };
+  return /\btype\s*=\s*["']dynamic["']/.test(root[0]) ? { state: "live" } : { state: "ended" };
+}
