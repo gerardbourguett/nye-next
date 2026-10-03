@@ -123,6 +123,22 @@ test("a direct stream's address can be copied", async ({ page, context, browserN
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(STREAMS.direct.id);
 });
 
+for (const [label, install] of [
+  ["writeText is rejected", () => Object.defineProperty(navigator, "clipboard", { value: { writeText: () => Promise.reject(new Error("blocked")) } })],
+  ["there is no Clipboard API", () => Object.defineProperty(navigator, "clipboard", { value: undefined })],
+] as const) {
+  test(`when ${label}, the address is shown to select and copy by hand`, async ({ page }) => {
+    await page.addInitScript(install);
+    await page.goto("/watch");
+    await channel(page, STREAMS.direct.label).click();
+    await page.getByRole("button", { name: "Copy stream address" }).click();
+    const field = page.getByLabel("Copying was blocked. Select and copy the address:");
+    await expect(field).toHaveValue(STREAMS.direct.id);
+    await expect(field).toBeFocused();
+    await expect(page.getByRole("button", { name: "Address copied" })).toHaveCount(0);
+  });
+}
+
 test("a web link source is never embedded: it opens its own page", async ({ page }) => {
   await page.goto("/watch");
   await channel(page, STREAMS.page.label).click();

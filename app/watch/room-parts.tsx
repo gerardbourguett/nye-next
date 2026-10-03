@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import { cn } from "@/lib/utils";
 import {
@@ -21,15 +21,37 @@ export const localTime = (iso: string) => new Date(iso).toLocaleString(undefined
 export const source = (option: StreamOption) =>
   [providerName(option.provider), streamHost(option), option.zone && cityFromZoneName(option.zone)].filter(Boolean).join(" · ");
 
-/** Direct streams (HLS, DASH) have no page to open, so their address is copied instead. */
+/**
+ * Direct streams (HLS, DASH) have no page to open, so their address is copied
+ * instead. If the browser blocks or lacks the clipboard, the address is shown
+ * in a selectable field, since it appears nowhere else.
+ */
 export function CopyAddress({ address }: { address: string }) {
-  const [copied, setCopied] = useState(false);
-  return <button type="button" className={styles.button} onClick={() => {
-    navigator.clipboard?.writeText(address).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2_000);
-    }, () => undefined);
-  }}>{copied ? "Address copied" : "Copy stream address"}</button>;
+  const id = useId();
+  const [state, setState] = useState<"idle" | "copied" | "manual">("idle");
+  const field = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (state === "manual") field.current?.select();
+  }, [state]);
+  const copy = async () => {
+    try {
+      if (!navigator.clipboard) throw new Error("No clipboard");
+      await navigator.clipboard.writeText(address);
+      setState("copied");
+      setTimeout(() => setState("idle"), 2_000);
+    } catch {
+      setState("manual");
+    }
+  };
+  return <>
+    <button type="button" className={styles.button} onClick={() => void copy()}>
+      {state === "copied" ? "Address copied" : "Copy stream address"}
+    </button>
+    {state === "manual" && <div className={styles.addressFallback} role="status">
+      <label htmlFor={id}>Copying was blocked. Select and copy the address:</label>
+      <input id={id} ref={field} readOnly value={address} onFocus={(event) => event.currentTarget.select()} />
+    </div>}
+  </>;
 }
 
 /** A card opens the provider's page; direct streams open in the room, which can play them. */
