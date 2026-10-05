@@ -21,6 +21,9 @@ export const STREAMS = {
   harbour: { provider: "youtube_channel", id: "UCabcdefghijklmnopqrstuv", label: "Harbour view (test)", zone: "Australia/Sydney" },
   sydney: { provider: "youtube", id: "5uZa3-RMFos", label: "Sydney fireworks (test)", zone: "Australia/Sydney" },
   main: { provider: "twitch", id: "vanderfondi", label: "vanderfondi (test)" },
+  // `.test` never resolves, so the server's status check for these fails fast and offline.
+  direct: { provider: "hls", id: "https://streams.example.test/rehearsal/index.m3u8", label: "Direct feed (test)" },
+  page: { provider: "link", id: "https://tv.example.test/live", label: "Broadcaster page (test)" },
 } as const;
 
 /**
@@ -37,7 +40,7 @@ export function fixtureSlots(now: number) {
   const sydney = resolveRolloverArrival("Australia/Sydney", crossingYear(now)).arrivalUtcMs;
   return [
     { id: IDS.now, title: "Rehearsal on now (test)", starts_at: iso(hour), ends_at: iso(hour + 2 * HOUR), published: true,
-      options: [STREAMS.studio, STREAMS.harbour] },
+      options: [STREAMS.studio, STREAMS.harbour, STREAMS.direct, STREAMS.page] },
     { id: IDS.next, title: "Coming up next (test)", starts_at: iso(hour + 3 * HOUR), ends_at: iso(hour + 4 * HOUR), published: true,
       options: [STREAMS.main] },
     { id: IDS.crossing, title: "Midnight in Sydney (test)", starts_at: iso(sydney - HOUR / 2), ends_at: iso(sydney + HOUR / 2),

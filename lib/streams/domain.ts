@@ -1,8 +1,16 @@
 import { isSupportedZone, isZoneName } from "../zones";
+import { isPublicHttpsUrl } from "./hostname";
 
-/** `youtube` is one video; `youtube_channel` is whatever that channel has live. */
-export type Provider = "twitch" | "youtube" | "youtube_channel";
-export const PROVIDERS: readonly Provider[] = ["twitch", "youtube", "youtube_channel"];
+/**
+ * `youtube` is one video; `youtube_channel` is whatever that channel has live.
+ * `hls` (.m3u8) and `dash` (.mpd) are direct streams played in the room, and
+ * `link` is any web page, opened in a new tab; their `id` is an HTTPS URL.
+ */
+export type Provider = "twitch" | "youtube" | "youtube_channel" | "hls" | "dash" | "link";
+export const PROVIDERS: readonly Provider[] = ["twitch", "youtube", "youtube_channel", "hls", "dash", "link"];
+export type UrlProvider = "hls" | "dash" | "link";
+export const isUrlProvider = (provider: unknown): provider is UrlProvider =>
+  provider === "hls" || provider === "dash" || provider === "link";
 /** `zone` is the IANA zone being celebrated; it ties the stream to a relay crossing. */
 export type StreamOption = { provider: Provider; id: string; label: string; zone?: string };
 export type Slot = {
@@ -26,20 +34,101 @@ const YOUTUBE_ID = /^[A-Za-z0-9_-]{11}$/;
 const YOUTUBE_CHANNEL_ID = /^UC[A-Za-z0-9_-]{22}$/;
 const YOUTUBE_HOSTS = ["youtube.com", "www.youtube.com", "m.youtube.com"];
 
+/** Stream URLs are keys in `?keys=` lists and deep links, so they stay short and free of separators. */
+export const MAX_STREAM_URL = 400;
+const URL_CHARS = /^https:\/\/[^\s,"'<>\\`#]+$/;
+const URL_EXTENSION: Record<UrlProvider, RegExp | null> = { hls: /\.m3u8$/i, dash: /\.mpd$/i, link: null };
+const URL_HELP: Record<UrlProvider, string> = {
+  hls: "Enter an HTTPS URL ending in .m3u8, on a public ASCII host name (no IP addresses, xn-- names, spaces or commas).",
+  dash: "Enter an HTTPS URL ending in .mpd, on a public ASCII host name (no IP addresses, xn-- names, spaces or commas).",
+  link: "Enter an HTTPS URL on a public ASCII host name (no IP addresses, xn-- names, spaces or commas).",
+};
+
+/**
+ * The canonical form of a stream URL, or null. Only HTTPS, no credentials,
+ * a public host name, a port of 1024 or above (or none), and for `hls`/`dash`
+ * the matching file extension; the fragment is dropped.
+ */
+function parseStreamUrl(provider: UrlProvider, input: string): URL | null {
+  if (input.length > MAX_STREAM_URL || !URL_CHARS.test(input)) return null;
+  let url: URL;
+  try { url = new URL(input); } catch { return null; }
+  // A trailing dot names the same host but is refused so the SQL backstop and this check agree.
+  if (url.hash || url.hostname.endsWith(".") || !isPublicHttpsUrl(url)) return null;
+  const extension = URL_EXTENSION[provider];
+  if (extension && !extension.test(url.pathname)) return null;
+  return url;
+}
+
+/** The form to store, as this runtime's URL parser writes it, or null when the rules refuse the address. */
+export function normalizeStreamUrl(provider: UrlProvider, input: string): string | null {
+  const url = parseStreamUrl(provider, input);
+  return url && url.href.length <= MAX_STREAM_URL ? url.href : null;
+}
+
+/**
+ * Whether a stored ID obeys the rules. Deliberately not "equals what the
+ * parser would write": engines differ on how they serialize characters such
+ * as ^ (Node 22 keeps it in a path, Node 24 writes %5E) and browsers differ
+ * too, so a byte-for-byte test would let a row the server saved fail to read
+ * back somewhere and take the whole schedule with it.
+ */
+export function isStreamUrl(provider: UrlProvider, id: string): boolean {
+  return parseStreamUrl(provider, id) !== null;
+}
+
+const queryLength = (text: string) => new URLSearchParams({ k: text }).toString().length - 2;
+
+/**
+ * Status-request keys in priority order, capped by count and by their
+ * percent-encoded length in the query string (what a server's request-line
+ * limit sees). A key too long for what is left is skipped; later ones may fit.
+ */
+export function capLiveKeys(keys: Iterable<string>, maxKeys = 24, maxEncoded = 6_000): string[] {
+  const kept: string[] = [];
+  let size = 0;
+  for (const key of keys) {
+    const cost = queryLength(key) + 3; // the encoded comma between keys
+    if (kept.length >= maxKeys) break;
+    if (size + cost > maxEncoded) continue;
+    kept.push(key);
+    size += cost;
+  }
+  return kept;
+}
+
 export function validProviderId(provider: unknown, id: unknown): boolean {
   if (typeof id !== "string") return false;
   if (provider === "twitch") return TWITCH_ID.test(id);
   if (provider === "youtube") return YOUTUBE_ID.test(id);
+  if (isUrlProvider(provider)) return isStreamUrl(provider, id);
   return provider === "youtube_channel" && YOUTUBE_CHANNEL_ID.test(id);
 }
 
 export function providerName(provider: Provider) {
-  return provider === "twitch" ? "Twitch" : "YouTube";
+  switch (provider) {
+    case "twitch": return "Twitch";
+    case "hls": return "HLS";
+    case "dash": return "DASH";
+    case "link": return "Web";
+    default: return "YouTube";
+  }
+}
+
+/** The host a URL-based option points at, for labels and consent notices. */
+export function streamHost(option: StreamOption): string | null {
+  if (!isUrlProvider(option.provider)) return null;
+  try { return new URL(option.id).hostname; } catch { return null; }
 }
 
 /** Accept only canonical providers, never an arbitrary player URL or HTML. */
 export function parseStreamSource(provider: Provider, input: string): string {
   const source = input.trim();
+  if (isUrlProvider(provider)) {
+    const url = normalizeStreamUrl(provider, source);
+    if (!url) throw new Error(URL_HELP[provider]);
+    return url;
+  }
   let id = source;
   if (source.includes(":") || source.includes("/")) {
     let url: URL;
@@ -172,6 +261,7 @@ export function reconcilePlayback(state: PlaybackState, slot: Slot | undefined, 
 
 export function providerUrl(option: StreamOption) {
   if (!validProviderId(option.provider, option.id)) throw new Error("Invalid provider ID.");
+  if (isUrlProvider(option.provider)) return option.id;
   if (option.provider === "twitch") return `https://www.twitch.tv/${option.id}`;
   return option.provider === "youtube"
     ? `https://www.youtube.com/watch?v=${option.id}`
@@ -180,6 +270,7 @@ export function providerUrl(option: StreamOption) {
 
 export function embedUrl(option: StreamOption, hostname: string) {
   if (!validProviderId(option.provider, option.id)) throw new Error("Invalid provider ID.");
+  if (isUrlProvider(option.provider)) throw new Error("URL streams play in the video player, not an embed.");
   if (option.provider === "youtube") return `https://www.youtube.com/embed/${option.id}?autoplay=0&playsinline=1`;
   if (option.provider === "youtube_channel") {
     return `https://www.youtube.com/embed/live_stream?${new URLSearchParams({ channel: option.id, autoplay: "0", playsinline: "1" })}`;
