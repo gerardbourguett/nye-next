@@ -33,6 +33,39 @@ jobs:
       # Without Supabase settings: the build must not depend on a project.
       - run: pnpm build
 
+  migrations:
+    name: Migrations (Postgres 16)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          # A throwaway database inside the job, reachable only from it: no password to keep.
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Every migration in order on an empty database, the newest one twice, and
+      # valid_stream_url against the application's own case table.
+      - run: pnpm check:migrations
+
   e2e:
     name: End-to-end (Playwright)
     runs-on: ubuntu-latest

@@ -6,6 +6,9 @@ de permisos no disponible no demuestra que falte una tabla o una membresía. Com
 estas comprobaciones manuales antes de publicar programación real. No se incluyen
 credenciales ni una programación de ejemplo.
 
+Para comprobar las migraciones en CI y aplicarlas desde GitHub en lugar del SQL Editor,
+vea [`migrations.md`](migrations.md).
+
 ## Pasos rápidos
 
 1. **Seleccione su proyecto existente de Supabase y su usuario existente de Auth.**
