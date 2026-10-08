@@ -46,7 +46,7 @@ export function Countdown({ initialYear, simulation }: { initialYear: number; si
   const now = useClock(simulation);
   const countdown = now === null ? null : readCountdown(now);
   // A preview carries its simulated instant to the other pages.
-  const carry = (path: string) => (simulation && now !== null ? simulationHref(now, simulation.speed, path) : path);
+  const carry = (path: string) => (simulation ? simulationHref(now ?? simulation.at, simulation.speed, path) : path);
 
   const units = [
     { label: "Days", value: countdown?.days },

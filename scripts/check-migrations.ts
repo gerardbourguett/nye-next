@@ -32,6 +32,11 @@ function check(ok: boolean, message: string) {
   if (!ok) { failures++; console.error(`FAIL  ${message}`); }
 }
 
+// Roles are cluster-wide: the stubs create the Supabase ones only if missing, and this run removes just those.
+const ROLES = ["anon", "authenticated", "service_role"];
+const existing = new Set(psql("postgres", ["-tA", "-c", `select rolname from pg_roles where rolname in (${ROLES.map(literal).join(",")})`]).split("\n").filter(Boolean));
+const created = ROLES.filter((role) => !existing.has(role));
+
 psql("postgres", ["-c", `create database ${database}`]);
 try {
   file(database, join(root, "supabase/tests/stubs.sql"));
@@ -76,6 +81,7 @@ try {
   }
 } finally {
   psql("postgres", ["-c", `drop database if exists ${database} with (force)`]);
+  for (const role of created) psql("postgres", ["-c", `drop role if exists ${role}`]);
 }
 
 if (failures > 0) {

@@ -1,14 +1,23 @@
 import type { Metadata } from "next";
 
-import { editionYear } from "@/lib/edition";
+import { editionTag, editionYear } from "@/lib/edition";
 import { requestEdition } from "@/lib/edition-server";
 import { parseSimulation } from "@/lib/relay-clock";
 import { Countdown } from "./countdown";
 
-// A preview (`?at=&speed=`) is kept out of search results.
+// A preview (`?at=&speed=`) names the edition of its simulated instant, not today's,
+// and is kept out of search results.
 export async function generateMetadata({ searchParams }: PageProps<"/">): Promise<Metadata> {
   const { at, speed } = await searchParams;
-  return parseSimulation(at, speed) ? { robots: { index: false, follow: false } } : {};
+  const simulation = parseSimulation(at, speed);
+  if (!simulation) return {};
+  const tag = editionTag(editionYear(simulation.at));
+  return {
+    title: { absolute: `${tag} (preview)` },
+    description: `A preview of ${tag} at a simulated time.`,
+    openGraph: { title: `${tag} (preview)`, description: `A preview of ${tag} at a simulated time.`, siteName: tag },
+    robots: { index: false, follow: false },
+  };
 }
 
 // The served markup never carries a stale year; the client keeps re-deriving

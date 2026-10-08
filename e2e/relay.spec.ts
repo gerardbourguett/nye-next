@@ -47,6 +47,7 @@ test("previews the night and links a crossing's stream to the viewing room", asy
   // A month before the wave whose Sydney slot is still ahead.
   await page.goto(`/road-to?at=${new Date(Date.UTC(crossingYear(Date.now()) - 1, 11, 1)).toISOString()}&speed=1`);
   await expect(page.getByRole("status").filter({ hasText: "Preview" })).toContainText("Nothing here is live.");
+  await expect(page.getByRole("link", { name: /#\d{4}Live/ })).toHaveAttribute("href", /^\/\?at=.*&speed=1$/);
   const link = page.locator("#crossing-660").getByRole("link", { name: STREAMS.sydney.label });
   // The preview's clock travels with the link, so the room shares the relay's time.
   await expect(link).toHaveAttribute("href", new RegExp(`^/watch\\?slot=${IDS.crossing}&stream=youtube%3A${STREAMS.sydney.id}&at=.+&speed=1$`));

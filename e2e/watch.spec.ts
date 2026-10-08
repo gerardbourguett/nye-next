@@ -214,10 +214,23 @@ test("a preview reads the schedule as of the simulated instant and shows no prov
   await page.goto(`/watch?at=${new Date(sydney - 5 * 60_000).toISOString()}&speed=1`);
   await expect(page.getByRole("status").filter({ hasText: "Preview" })).toContainText("Nothing here is live.");
   await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", /noindex/);
+  await expect(page).toHaveTitle(/^Viewing room \(preview\) \| #\d{4}Live$/);
+  await expect(page.getByRole("link", { name: "Back to the relay" })).toHaveAttribute("href", /^\/road-to\?at=.*&speed=1$/);
   await expect(rail(page)).toContainText(STREAMS.sydney.label);
   await expect(rail(page).getByText("Live", { exact: true })).toHaveCount(0);
   expect(asked).toBe(0);
   await page.getByRole("link", { name: "Back to real time" }).click();
   await expect(page).toHaveURL(/\/watch$/);
   await expect(rail(page)).toContainText("Rehearsal on now (test)");
+});
+
+test("a preview's clock keeps advancing through a slow schedule response", async ({ page }) => {
+  const at = Date.UTC(2026, 11, 31, 10);
+  // Answer after 1.5 s: at 3600x that is 1.5 simulated hours the clock must not lose.
+  await page.route("**/watch/schedule**", async (route) => { await new Promise((resolve) => setTimeout(resolve, 1_500)); await route.continue(); });
+  await page.goto(`/watch?at=${new Date(at).toISOString()}&speed=3600`);
+  const clock = page.getByRole("status").filter({ hasText: "Preview" }).locator("xpath=following-sibling::p").locator("time");
+  await expect(clock).toBeVisible();
+  const shown = Date.parse((await clock.getAttribute("datetime")) ?? "");
+  expect(shown - at).toBeGreaterThanOrEqual(3_600_000);
 });

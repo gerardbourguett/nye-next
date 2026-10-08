@@ -47,8 +47,11 @@ async function main() {
 
   try {
     const { body } = await get("/");
-    if (body.includes(editionTag(editionYear(Date.now())))) ok(`home shows ${editionTag(editionYear(Date.now()))}`);
-    else fail(`home does not show ${editionTag(editionYear(Date.now()))}`);
+    // The heading itself: the tag also sits in the page's metadata, which would pass even with the heading missing.
+    const heading = /<h1[^>]*>([\s\S]*?)<\/h1>/.exec(body)?.[1].replace(/<!--[\s\S]*?-->|<[^>]+>/g, "").trim();
+    const expected = editionTag(editionYear(Date.now()));
+    if (heading === expected) ok(`home heading reads ${expected}`);
+    else fail(`home heading reads ${JSON.stringify(heading ?? null)}, expected ${expected}`);
   } catch { /* reported above */ }
 
   const keys = new Set<string>([`twitch:${MAIN_CHANNEL}`]);

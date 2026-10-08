@@ -12,7 +12,7 @@ import { ChannelRail, ChatPanel, ComingUp, CopyAddress, localTime, source, Strea
 import { StreamVideo } from "./stream-video";
 
 /** `askedFor` is the deep-linked slot id this snapshot was fetched with, if any. */
-type Snapshot = { slots: Slot[]; serverNow: number; receivedAt: number; askedFor: string | null };
+type Snapshot = { slots: Slot[]; serverNow: number; receivedAt: number; sentAt: number; askedFor: string | null };
 const LIVE_POLL_MS = 60_000;
 // A preview's time has nothing to do with what the providers report now, so it shows none.
 const NO_STATUS: LiveMap = {};
@@ -52,7 +52,8 @@ export function ViewingRoom({ requested: initialRequest = null, simulation = nul
     try {
       const askedFor = pendingSlotId.current;
       const params = new URLSearchParams(askedFor ? { slot: askedFor } : {});
-      if (simAt !== null) params.set("at", new Date(readClock({ at: simAt, speed }, anchor.current, Date.now())).toISOString());
+      const sentAt = Date.now();
+      if (simAt !== null) params.set("at", new Date(readClock({ at: simAt, speed }, anchor.current, sentAt)).toISOString());
       const query = params.size ? `?${params}` : "";
       const response = await fetch(`/watch/schedule${query}`, { cache: "no-store", credentials: "omit",
         signal: AbortSignal.any([controller.signal, AbortSignal.timeout(12_000)]) });
@@ -62,7 +63,7 @@ export function ViewingRoom({ requested: initialRequest = null, simulation = nul
           typeof value.serverNow !== "number" || !Number.isFinite(value.serverNow)) throw new Error("Invalid schedule");
       const slots = decodeSlots(value.slots).filter((slot) => slot.published);
       if (!controller.signal.aborted) {
-        setSnapshot({ slots, serverNow: value.serverNow, receivedAt: Date.now(), askedFor });
+        setSnapshot({ slots, serverNow: value.serverNow, receivedAt: Date.now(), sentAt, askedFor });
         setError(false);
       }
     } catch {
@@ -93,7 +94,9 @@ export function ViewingRoom({ requested: initialRequest = null, simulation = nul
     };
   }, [refresh]);
 
-  const now = snapshot && clock !== null ? snapshot.serverNow + (clock - snapshot.receivedAt) * speed : null;
+  // A preview's `serverNow` is the simulated instant of the moment the request was sent, so it
+  // advances from then (not from the response), or each refresh would rewind it by latency x speed.
+  const now = snapshot && clock !== null ? snapshot.serverNow + (clock - (simAt !== null ? snapshot.sentAt : snapshot.receivedAt)) * speed : null;
   const stale = snapshot !== null && clock !== null && clock - snapshot.receivedAt > 90_000;
   const slot = snapshot && now !== null && !stale ? activeSlot(snapshot.slots, now) : undefined;
   const option = selectedOption(slot, playback.selection);
