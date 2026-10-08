@@ -1,4 +1,5 @@
-import { IDS, STREAMS } from "./fixtures";
+import { resolveRolloverArrival } from "../data/relay";
+import { crossingYear, IDS, STREAMS } from "./fixtures";
 
 const PLAYLIST = "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:6\n#EXT-X-MEDIA-SEQUENCE:0\n#EXTINF:6.0,\nseg0.ts\n";
 const CORS = { "access-control-allow-origin": "*" };
@@ -203,4 +204,20 @@ test("when the video element itself errors, the player is released and stops pol
   const settled = playlistRequests;
   await page.waitForTimeout(3_500);
   expect(playlistRequests, "no more playlist requests after the failure view").toBeLessThanOrEqual(settled + 1);
+});
+
+test("a preview reads the schedule as of the simulated instant and shows no provider status", async ({ page }) => {
+  const sydney = resolveRolloverArrival("Australia/Sydney", crossingYear(Date.now())).arrivalUtcMs;
+  let asked = 0;
+  await page.route("**/watch/live?**", (route) => { asked++; return route.fulfill({ json: { live: {}, providers: {} } }); });
+  // Five minutes before Sydney's midnight, a slot that is hours or months away in real time.
+  await page.goto(`/watch?at=${new Date(sydney - 5 * 60_000).toISOString()}&speed=1`);
+  await expect(page.getByRole("status").filter({ hasText: "Preview" })).toContainText("Nothing here is live.");
+  await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", /noindex/);
+  await expect(rail(page)).toContainText(STREAMS.sydney.label);
+  await expect(rail(page).getByText("Live", { exact: true })).toHaveCount(0);
+  expect(asked).toBe(0);
+  await page.getByRole("link", { name: "Back to real time" }).click();
+  await expect(page).toHaveURL(/\/watch$/);
+  await expect(rail(page)).toContainText("Rehearsal on now (test)");
 });

@@ -31,9 +31,10 @@ function publicClient() {
   });
 }
 
-export async function publicSchedule(requestedSlotId?: string) {
+/** `at` is a preview's simulated instant; the schedule is then read as of that moment. */
+export async function publicSchedule(requestedSlotId?: string, at?: number) {
   const client = publicClient();
-  const now = Date.now();
+  const now = at ?? Date.now();
   const iso = (ms: number) => new Date(ms).toISOString();
   // Current and upcoming slots in start order. The room shows the current
   // slot and the next 12, so the 400-row cap can only trim slots it never
@@ -57,7 +58,7 @@ export async function publicSchedule(requestedSlotId?: string) {
   if (upcoming.error || ended.error || linked.error) throw new Error("Schedule unavailable.");
   const slots = [...decodeSlots(ended.data), ...decodeSlots(upcoming.data)];
   for (const slot of decodeSlots(linked.data)) if (!slots.some((item) => item.id === slot.id)) slots.push(slot);
-  return { slots, serverNow: Date.now() };
+  return { slots, serverNow: at ?? Date.now() };
 }
 
 const PAGE = 500;

@@ -72,6 +72,8 @@ export function crossingStreams(slots: readonly Slot[], year: number): CrossingS
   return result;
 }
 
-export function watchHref(stream: Pick<CrossingStream, "slotId" | "key">) {
-  return `/watch?${new URLSearchParams({ slot: stream.slotId, stream: stream.key })}`;
+/** `simulation` is a preview's query (`at=…&speed=…`), carried so the room shares the relay's clock. */
+export function watchHref(stream: Pick<CrossingStream, "slotId" | "key">, simulation?: string) {
+  const query = new URLSearchParams({ slot: stream.slotId, stream: stream.key });
+  return `/watch?${simulation ? `${query}&${simulation}` : query}`;
 }

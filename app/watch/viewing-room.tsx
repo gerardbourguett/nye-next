@@ -4,6 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useTheme } from "next-themes";
 import { activeSlot, capLiveKeys, decodeSlots, embedUrl, HOUR_MS, MAIN_CHANNEL, optionKey, providerName, providerUrl, reconcilePlayback,
   selectedOption, streamHost, type PlaybackState, type Slot, type StreamOption } from "@/lib/streams/domain";
+import { SimulationNotice } from "@/components/simulation-notice";
+import { readClock, type Simulation } from "@/lib/relay-clock";
 import { cn } from "@/lib/utils";
 import styles from "@/components/streams/surface.module.css";
 import { ChannelRail, ChatPanel, ComingUp, CopyAddress, localTime, source, StreamInfo, type Browser, type LiveMap } from "./room-parts";
@@ -12,11 +14,17 @@ import { StreamVideo } from "./stream-video";
 /** `askedFor` is the deep-linked slot id this snapshot was fetched with, if any. */
 type Snapshot = { slots: Slot[]; serverNow: number; receivedAt: number; askedFor: string | null };
 const LIVE_POLL_MS = 60_000;
+// A preview's time has nothing to do with what the providers report now, so it shows none.
+const NO_STATUS: LiveMap = {};
 
 type Selection = NonNullable<PlaybackState["selection"]>;
 
 /** `requested` is a validated deep link (from the relay); it applies once its hour is on. */
-export function ViewingRoom({ requested: initialRequest = null }: { requested?: Selection | null }) {
+export function ViewingRoom({ requested: initialRequest = null, simulation = null }: { requested?: Selection | null; simulation?: Simulation | null }) {
+  const simAt = simulation?.at ?? null;
+  const speed = simulation?.speed ?? 1;
+  // Real time at which the simulated clock started; reset with each simulation.
+  const anchor = useRef(0);
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [clock, setClock] = useState<number | null>(null);
   const [browser, setBrowser] = useState<Browser | null>(null);
@@ -43,7 +51,9 @@ export function ViewingRoom({ requested: initialRequest = null }: { requested?: 
     setPending(true);
     try {
       const askedFor = pendingSlotId.current;
-      const query = askedFor ? `?${new URLSearchParams({ slot: askedFor })}` : "";
+      const params = new URLSearchParams(askedFor ? { slot: askedFor } : {});
+      if (simAt !== null) params.set("at", new Date(readClock({ at: simAt, speed }, anchor.current, Date.now())).toISOString());
+      const query = params.size ? `?${params}` : "";
       const response = await fetch(`/watch/schedule${query}`, { cache: "no-store", credentials: "omit",
         signal: AbortSignal.any([controller.signal, AbortSignal.timeout(12_000)]) });
       if (!response.ok) throw new Error("Unavailable");
@@ -63,10 +73,11 @@ export function ViewingRoom({ requested: initialRequest = null }: { requested?: 
         if (!controller.signal.aborted) setPending(false);
       }
     }
-  }, []);
+  }, [simAt, speed]);
 
   useEffect(() => {
     function mount() {
+      anchor.current = Date.now();
       setBrowser({ hostname: window.location.hostname, secure: window.location.protocol === "https:" });
       setClock(Date.now());
       void refresh();
@@ -82,7 +93,7 @@ export function ViewingRoom({ requested: initialRequest = null }: { requested?: 
     };
   }, [refresh]);
 
-  const now = snapshot && clock !== null ? snapshot.serverNow + clock - snapshot.receivedAt : null;
+  const now = snapshot && clock !== null ? snapshot.serverNow + (clock - snapshot.receivedAt) * speed : null;
   const stale = snapshot !== null && clock !== null && clock - snapshot.receivedAt > 90_000;
   const slot = snapshot && now !== null && !stale ? activeSlot(snapshot.slots, now) : undefined;
   const option = selectedOption(slot, playback.selection);
@@ -134,6 +145,7 @@ export function ViewingRoom({ requested: initialRequest = null }: { requested?: 
   // Stream addresses are keys too, so the cap counts their percent-encoded length.
   const liveKeys = capLiveKeys(liveKeySet).sort().join(",");
   useEffect(() => {
+    if (simAt !== null) return;
     const controller = new AbortController();
     const load = async () => {
       try {
@@ -153,8 +165,9 @@ export function ViewingRoom({ requested: initialRequest = null }: { requested?: 
     void load();
     const interval = setInterval(() => void load(), LIVE_POLL_MS);
     return () => { controller.abort(); clearInterval(interval); };
-  }, [liveKeys]);
-  const info = option ? live[optionKey(option)] : undefined;
+  }, [liveKeys, simAt]);
+  const statuses = simAt !== null ? NO_STATUS : live;
+  const info = option ? statuses[optionKey(option)] : undefined;
   const emptyTitle = !snapshot ? error ? "The schedule is unavailable" : "Loading the schedule…" : stale
     ? "Waiting for a fresh schedule" : upcoming.length ? "The next slot is on its way" : ended
       ? "The published schedule has ended" : "No programming published yet";
@@ -162,6 +175,7 @@ export function ViewingRoom({ requested: initialRequest = null }: { requested?: 
   const select = (item: StreamOption) => slot && setPlayback({ selection: { slotId: slot.id, key: optionKey(item) }, loadedPlayer: null });
 
   return <>
+    {simulation && <SimulationNotice simulation={simulation} now={now} exitHref="/watch" className={styles.notice} />}
     {linkGone && <p className={styles.notice} role="status">
       The stream in your link is no longer scheduled. Choose from what is on now or coming up.
     </p>}
@@ -173,7 +187,7 @@ export function ViewingRoom({ requested: initialRequest = null }: { requested?: 
       Retrying every 30 seconds. <button className={styles.button} disabled={pending} onClick={() => void refresh()}>{pending ? "Refreshing…" : "Try again"}</button>
     </div>}
     <div className={styles.room}>
-      <ChannelRail slot={slot} selectedKey={option ? optionKey(option) : null} live={live} onSelect={select}
+      <ChannelRail slot={slot} selectedKey={option ? optionKey(option) : null} live={statuses} onSelect={select}
         upNext={upcoming.slice(0, 3)} />
       <section className={styles.stage} aria-label="Player">
         <div className={styles.player} ref={playerColumn}>
@@ -212,6 +226,6 @@ export function ViewingRoom({ requested: initialRequest = null }: { requested?: 
       </section>
       <ChatPanel option={option} info={info} browser={browser} dark={resolvedTheme === "dark"} />
     </div>
-    <ComingUp upcoming={upcoming} live={live} loaded={snapshot !== null} />
+    <ComingUp upcoming={upcoming} live={statuses} loaded={snapshot !== null} />
   </>;
 }

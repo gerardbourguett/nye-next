@@ -1,7 +1,7 @@
 /**
- * Simulated time for previewing the relay before (or after) the night:
- * `/road-to?at=<ISO instant>&speed=<1–3600>`. Pure, so the server page and
- * the client board read the same simulation from the same query.
+ * Simulated time for previewing the site before (or after) the night:
+ * `?at=<ISO instant>&speed=<1–3600>` on `/`, `/road-to` and `/watch`. Pure,
+ * so the server page and the client read the same simulation from the same query.
  */
 export type Simulation = { at: number; speed: number };
 
@@ -25,8 +25,13 @@ export function readClock(simulation: Simulation | null, anchor: number, realNow
   return simulation ? simulation.at + (realNow - anchor) * simulation.speed : realNow;
 }
 
-export function simulationHref(at: number, speed: number): string {
-  return `/road-to?${new URLSearchParams({ at: new Date(at).toISOString(), speed: String(speed) })}`;
+/** The query that carries a simulation from page to page. */
+export function simulationQuery(at: number, speed: number): string {
+  return new URLSearchParams({ at: new Date(at).toISOString(), speed: String(speed) }).toString();
+}
+
+export function simulationHref(at: number, speed: number, path = "/road-to"): string {
+  return `${path}?${simulationQuery(at, speed)}`;
 }
 
 /** `d HH:MM:SS` until an instant, clamped at zero. */
