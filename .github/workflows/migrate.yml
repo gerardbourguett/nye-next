@@ -35,6 +35,12 @@ jobs:
       - run: supabase link --project-ref "${{ vars.SUPABASE_PROJECT_REF }}"
       - name: Pending migrations
         run: supabase db push --dry-run
+      # "Run workflow" lets the operator pick any branch; only the protected one may change production.
+      - name: Refuse to apply from another branch
+        if: ${{ inputs.apply && github.ref != 'refs/heads/main' }}
+        run: |
+          echo "::error::Migrations are applied from main only (this run is on ${GITHUB_REF_NAME}). Merge first, then run this workflow on main."
+          exit 1
       - name: Apply
-        if: ${{ inputs.apply }}
+        if: ${{ inputs.apply && github.ref == 'refs/heads/main' }}
         run: supabase db push

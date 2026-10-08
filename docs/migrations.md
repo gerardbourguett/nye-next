@@ -33,7 +33,8 @@ Si cambia `valid_stream_url`, `isStreamUrl` o `normalizeStreamUrl`, añada el ca
 ## Aplicar a Supabase desde GitHub
 
 El flujo **Apply migrations** (`.github/workflows/migrate.yml`) es manual. Sin la casilla
-*apply* solo muestra qué migraciones se ejecutarían (`supabase db push --dry-run`).
+*apply* solo muestra qué migraciones se ejecutarían (`supabase db push --dry-run`). Con la
+casilla, solo aplica si el flujo se ejecuta sobre `main`; en cualquier otra rama falla a propósito.
 
 Configuración, una sola vez:
 

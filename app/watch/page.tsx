@@ -21,6 +21,7 @@ export default async function WatchPage({ searchParams }: PageProps<"/watch">) {
   const { slot, stream, at, speed } = await searchParams;
   const simulation = parseSimulation(at, speed);
   return <StreamShell wide relayHref={simulation ? simulationHref(simulation.at, simulation.speed) : undefined} title="The viewing room." description="Choose what to watch as the night moves around the world. One player, with the alternatives close at hand.">
-    <ViewingRoom requested={parseSelection(slot, stream)} simulation={simulation} />
+    {/* Keyed by the clock, so leaving a preview (or changing it) starts from an empty room instead of a snapshot read at another instant. */}
+    <ViewingRoom key={simulation ? `${simulation.at}:${simulation.speed}` : "real"} requested={parseSelection(slot, stream)} simulation={simulation} />
   </StreamShell>;
 }

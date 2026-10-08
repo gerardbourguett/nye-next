@@ -42,7 +42,7 @@ export function fixtureSlots(now: number) {
     { id: IDS.now, title: "Rehearsal on now (test)", starts_at: iso(hour), ends_at: iso(hour + 2 * HOUR), published: true,
       options: [STREAMS.studio, STREAMS.harbour, STREAMS.direct, STREAMS.page] },
     { id: IDS.next, title: "Coming up next (test)", starts_at: iso(hour + 3 * HOUR), ends_at: iso(hour + 4 * HOUR), published: true,
-      options: [STREAMS.main] },
+      options: [STREAMS.main, STREAMS.direct] },
     { id: IDS.crossing, title: "Midnight in Sydney (test)", starts_at: iso(sydney - HOUR / 2), ends_at: iso(sydney + HOUR / 2),
       published: true, options: [STREAMS.sydney] },
     { id: "11111111-1111-4111-8111-000000000009", title: "Draft (test)", starts_at: iso(hour + 5 * HOUR),

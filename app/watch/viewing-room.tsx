@@ -5,7 +5,7 @@ import { useTheme } from "next-themes";
 import { activeSlot, capLiveKeys, decodeSlots, embedUrl, HOUR_MS, MAIN_CHANNEL, optionKey, providerName, providerUrl, reconcilePlayback,
   selectedOption, streamHost, type PlaybackState, type Slot, type StreamOption } from "@/lib/streams/domain";
 import { SimulationNotice } from "@/components/simulation-notice";
-import { readClock, type Simulation } from "@/lib/relay-clock";
+import { readClock, simulationQuery, type Simulation } from "@/lib/relay-clock";
 import { cn } from "@/lib/utils";
 import styles from "@/components/streams/surface.module.css";
 import { ChannelRail, ChatPanel, ComingUp, CopyAddress, localTime, source, StreamInfo, type Browser, type LiveMap } from "./room-parts";
@@ -229,6 +229,7 @@ export function ViewingRoom({ requested: initialRequest = null, simulation = nul
       </section>
       <ChatPanel option={option} info={info} browser={browser} dark={resolvedTheme === "dark"} />
     </div>
-    <ComingUp upcoming={upcoming} live={statuses} loaded={snapshot !== null} />
+    <ComingUp upcoming={upcoming} live={statuses} loaded={snapshot !== null}
+      preview={simulation ? simulationQuery(now ?? simulation.at, speed) : undefined} />
   </>;
 }

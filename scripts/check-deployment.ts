@@ -68,21 +68,35 @@ async function main() {
   }
 
   try {
-    const query = new URLSearchParams({ keys: capLiveKeys(keys).join(",") });
-    const { status, body } = await get(`/watch/live?${query}`);
-    const value = JSON.parse(body) as { live?: Record<string, { live: boolean; viewers?: number; title?: string }>; providers?: Record<string, boolean> };
-    if (status !== 200 || !value.live || !value.providers) fail(`/watch/live answered ${status} without status`);
-    else {
-      ok("/watch/live answers");
-      for (const [provider, configured] of Object.entries(value.providers)) {
-        if (configured) ok(`${provider} credentials reached the server`);
-        else (requireProviders ? fail : warn)(`${provider} has no credentials on the server, so ${provider} streams will always read "Scheduled"`);
-      }
-      for (const key of keys) {
-        const info = value.live[key];
-        console.log(`      ${key.padEnd(48)} ${info ? (info.live ? `LIVE${info.viewers === undefined ? "" : ` · ${info.viewers} watching`}` : "offline") : "unconfirmed"}`);
-      }
+    // One request holds at most 24 keys and a bounded query: ask in as many as the schedule needs.
+    type Status = { live: boolean; viewers?: number; title?: string };
+    const statuses: Record<string, Status> = {};
+    let providers: Record<string, boolean> | undefined;
+    let remaining = [...keys];
+    const unchecked: string[] = [];
+    while (remaining.length > 0) {
+      const batch = capLiveKeys(remaining);
+      if (batch.length === 0) { unchecked.push(...remaining); break; } // a key too long for any request
+      const query = new URLSearchParams({ keys: batch.join(",") });
+      const { status, body } = await get(`/watch/live?${query}`);
+      const value = JSON.parse(body) as { live?: Record<string, Status>; providers?: Record<string, boolean> };
+      if (status !== 200 || !value.live || !value.providers) throw new Error(`answered ${status} without status`);
+      Object.assign(statuses, value.live);
+      providers ??= value.providers;
+      remaining = remaining.filter((key) => !batch.includes(key));
     }
+    ok("/watch/live answers");
+    for (const [provider, configured] of Object.entries(providers ?? {})) {
+      if (configured) ok(`${provider} credentials reached the server`);
+      else (requireProviders ? fail : warn)(`${provider} has no credentials on the server, so ${provider} streams will always read "Scheduled"`);
+    }
+    for (const key of keys) {
+      const info = statuses[key];
+      const text = unchecked.includes(key) ? "not checked (the address is too long for a status request)"
+        : info ? (info.live ? `LIVE${info.viewers === undefined ? "" : ` · ${info.viewers} watching`}` : "offline") : "unconfirmed";
+      console.log(`      ${key.padEnd(48)} ${text}`);
+    }
+    if (unchecked.length > 0) warn(`${unchecked.length} stream(s) could not be checked`);
   } catch (error) {
     fail(`/watch/live is not readable: ${error instanceof Error ? error.message : error}`);
   }
