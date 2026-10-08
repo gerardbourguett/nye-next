@@ -10,6 +10,7 @@
     "test:streams": "tsx --test tests/streams/*.test.ts",
     "test:timezones": "tsx --test tests/timezones/*.test.ts",
     "check:migrations": "tsx scripts/check-migrations.ts",
+    "check:deployment": "tsx scripts/check-deployment.ts",
     "test:e2e": "playwright test"
   },
   "dependencies": {
