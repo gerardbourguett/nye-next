@@ -20,8 +20,8 @@ export async function generateMetadata({ searchParams }: PageProps<"/road-to">):
     // names its own year and is kept out of search results.
     title: simulation ? { absolute: `The Relay (preview) | ${editionTag(year)}` } : "The Relay",
     description: `Every place on Earth, ordered by when its own midnight crosses into ${year} — from the first timezone to reach it to the last.`,
-    alternates: { canonical: "/road-to" },
-    ...(simulation && { robots: { index: false, follow: false } }),
+    // A preview is not the page: no canonical, and out of search results.
+    ...(simulation ? { robots: { index: false, follow: false } } : { alternates: { canonical: "/road-to" } }),
   };
 }
 

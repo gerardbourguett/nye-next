@@ -34,12 +34,14 @@ for (const [path, canonical] of [["/", "/"], ["/road-to", "/road-to"], ["/watch"
   });
 }
 
-test("a preview is not canonical anywhere and stays out of search results", async ({ page }) => {
-  await page.goto(`/?at=${new Date(Date.UTC(year, 0, 1, 5)).toISOString()}&speed=1`);
-  await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", /noindex/);
-  await expect(page.locator('link[rel="canonical"]')).toHaveCount(0);
-  await expect(page.locator('script[type="application/ld+json"]')).toHaveCount(0);
-});
+for (const path of ["/", "/road-to", "/watch"]) {
+  test(`a preview of ${path} is not canonical and stays out of search results`, async ({ page }) => {
+    await page.goto(`${path}?at=${new Date(Date.UTC(year, 0, 1, 5)).toISOString()}&speed=1`);
+    await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", /noindex/);
+    await expect(page.locator('link[rel="canonical"]')).toHaveCount(0);
+    await expect(page.locator('script[type="application/ld+json"]')).toHaveCount(0);
+  });
+}
 
 test("sharing a link shows an image, a title and a large card", async ({ page, request }) => {
   await page.goto("/");
