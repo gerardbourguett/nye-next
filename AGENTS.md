@@ -62,6 +62,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## UI and product boundaries
 
+- Accessibility is tested with axe (`e2e/a11y.spec.ts`: WCAG 2.0/2.1 A and AA plus best practices on every page, signed-in `/admin` included, light and dark, desktop and mobile). A failure prints the measured contrast, colours and selector. Body text on the page and the rail needs 4.5:1: `--muted-foreground` is `oklch(0.52 …)` in the light theme, and the relay's text highlight is `--relay-highlight-text` (deeper emerald in light), keeping the bright `--relay-highlight` for fills and lines.
 - Tailwind v4 is wired through `@tailwindcss/postcss`; CSS imports, theme tokens and reduced-motion rules live in `app/globals.css`, not a Tailwind JS config.
 - `components.json` selects shadcn `base-sera`; the local button wraps `@base-ui/react/button`, not Radix. Check its actual props before copying component examples; merge classes with `cn()` from `lib/utils.ts`.
 - `app/layout.tsx` loads Archivo and Big Shoulders through `next/font/google` and wraps routes in the class-based, system-default theme provider. README's Geist description is stale.

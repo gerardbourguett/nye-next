@@ -7,12 +7,18 @@
   --relay-muted: var(--muted-foreground);
   --relay-line: var(--border);
   --relay-highlight: var(--color-emerald-500, oklch(69.6% 0.17 162.48));
+  /* The bright green is for fills and lines; as text on a light page it is only 2.5:1, so text uses a deeper one (5.4:1). */
+  --relay-highlight-text: var(--color-emerald-700, oklch(50.8% 0.118 165.6));
   --relay-focus: color-mix(in oklab, var(--ring) 50%, transparent);
   flex: 1;
   color: var(--relay-ink);
   background: var(--relay-ground);
   font-family: var(--font-sans), sans-serif;
   -webkit-font-smoothing: antialiased;
+}
+
+:global(.dark) .board {
+  --relay-highlight-text: var(--relay-highlight);
 }
 
 .board :focus-visible {
@@ -137,7 +143,7 @@
 
 .progressCount {
   font-variant-numeric: tabular-nums;
-  color: var(--relay-highlight);
+  color: var(--relay-highlight-text);
 }
 
 .progressTrack {
@@ -207,7 +213,7 @@
 }
 
 .viewerLink {
-  color: var(--relay-highlight);
+  color: var(--relay-highlight-text);
   font-size: 1.375rem;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
@@ -283,7 +289,7 @@
 }
 
 .crossed .crossingIdentity h3 {
-  color: var(--relay-highlight);
+  color: var(--relay-highlight-text);
 }
 
 .crossing:target {
@@ -371,7 +377,7 @@
   align-items: center;
   gap: 0.5rem;
   margin: 0 0 0.625rem;
-  color: var(--relay-highlight);
+  color: var(--relay-highlight-text);
   font-size: 0.8125rem;
   font-weight: 650;
 }
