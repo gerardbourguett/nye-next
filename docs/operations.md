@@ -3,7 +3,10 @@
 ## Rendimiento y carga el 31 de diciembre
 
 - `/watch/schedule`, que cada espectador consulta cada 30 segundos, se comparte en la CDN
-  durante 5 segundos (más 10 de revalidación en segundo plano): miles de espectadores
+  durante 5 segundos (más 10 de revalidación en segundo plano; los navegadores no lo
+  guardan, y la CDN recibe sus propias cabeceras `Vercel-CDN-Cache-Control` y
+  `CDN-Cache-Control`; el cliente pide con el modo de caché predeterminado, porque
+  `no-store` pediría a la CDN que lo ignore): miles de espectadores
   provocan unas pocas lecturas de la base de datos por minuto. Los enlaces profundos
   (`?slot=`) y las vistas previas (`?at=`) nunca se comparten. La sala corrige el reloj con
   la cabecera `Age`, de modo que una respuesta compartida no atrasa el horario.
@@ -32,7 +35,10 @@
   ilegible o catálogo atrasado) marca la ejecución en rojo y GitHub envía un correo.
   Para activarlo, cree la variable de repositorio `SITE_URL`
   (**Settings → Secrets and variables → Actions → Variables**), por ejemplo
-  `https://su-sitio.example`. Los flujos programados pueden retrasarse varios minutos y
+  `https://su-sitio.example`. El monitor solo da verde con estados explícitamente sanos:
+  programación `ok` y catálogo `ok`. Si todavía no configuró la sincronización diaria, el
+  catálogo figura como `unknown` y el monitor fallará: configúrela primero, o cree la
+  variable `CATALOG_SYNC` con el valor `false` para vigilar solo el sitio y la programación. Los flujos programados pueden retrasarse varios minutos y
   GitHub los desactiva tras 60 días sin actividad en el repositorio: vuelva a activarlos
   en la pestaña **Actions** si ocurre. Para un aviso más rápido, apunte además un
   servicio externo de disponibilidad (UptimeRobot, Better Stack…) a `/health`.

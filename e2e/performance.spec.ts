@@ -25,9 +25,16 @@ test("the map and flags are cached for a day, not revalidated on every visit", a
   }
 });
 
-test("the schedule is shared by the CDN for seconds, except deep links and previews", async ({ request }) => {
-  expect((await request.get("/watch/schedule")).headers()["cache-control"]).toBe("public, max-age=0, s-maxage=5, stale-while-revalidate=10");
+test("the schedule is shared by the CDN for seconds (never kept by browsers), except deep links and previews", async ({ request }) => {
+  const plain = (await request.get("/watch/schedule")).headers();
+  // Browsers keep nothing; the CDN is told, by its own headers, to share for 5 seconds.
+  expect(plain["cache-control"]).toBe("no-store, max-age=0");
+  expect(plain["cdn-cache-control"]).toBe("public, max-age=5, stale-while-revalidate=10");
+  expect(plain["vercel-cdn-cache-control"]).toBe("public, max-age=5, stale-while-revalidate=10");
   for (const query of ["?slot=11111111-1111-4111-8111-000000000001", `?at=${new Date().toISOString()}`, "?other=1"]) {
-    expect((await request.get(`/watch/schedule${query}`)).headers()["cache-control"], query).toBe("no-store, max-age=0");
+    const headers = (await request.get(`/watch/schedule${query}`)).headers();
+    expect(headers["cache-control"], query).toBe("no-store, max-age=0");
+    expect(headers["cdn-cache-control"], query).toBeUndefined();
+    expect(headers["vercel-cdn-cache-control"], query).toBeUndefined();
   }
 });

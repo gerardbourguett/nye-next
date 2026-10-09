@@ -17,7 +17,8 @@ create table if not exists public.stream_slot_changes (
 );
 create index if not exists stream_slot_changes_recent on public.stream_slot_changes (changed_at desc, id desc);
 alter table public.stream_slot_changes enable row level security;
-revoke all on public.stream_slot_changes from public, anon, authenticated;
+-- `service_role` bypasses RLS and, on projects with automatic Data API grants, gets table writes by default: take them away too.
+revoke all on public.stream_slot_changes from public, anon, authenticated, service_role;
 grant select on public.stream_slot_changes to authenticated;
 drop policy if exists "Admins may read the change log" on public.stream_slot_changes;
 create policy "Admins may read the change log" on public.stream_slot_changes

@@ -107,6 +107,13 @@ try {
     select count(*) from public.stream_slot_changes`) === "1", "an admin should read the change log");
   check(answer(`${setup} ${asUser(ADMIN)} ${insertSlot(slotId, "By admin")};
     reset role; ${asUser(OTHER)} select count(*) from public.stream_slot_changes`) === "0", "a signed-in user who is not an admin should read no log rows");
+  // The service role bypasses RLS: only its table privileges stand between it and the log.
+  for (const statement of ["update public.stream_slot_changes set operation = 'delete'", "delete from public.stream_slot_changes",
+    `insert into public.stream_slot_changes (operation, slot_id) values ('insert', '${SLOT}')`]) {
+    let allowed = true;
+    try { psql(database, ["-c", `begin; set local role service_role; ${statement}`], true); } catch { allowed = false; }
+    check(!allowed, `the service role should not be able to write the change log directly (${statement.split(" ")[0]})`);
+  }
   for (const [name, statement] of [["update", "update public.stream_slot_changes set operation = 'delete'"], ["delete", "delete from public.stream_slot_changes"],
     ["insert", `insert into public.stream_slot_changes (operation, slot_id) values ('insert', '${SLOT}')`]] as const) {
     let allowed = true;

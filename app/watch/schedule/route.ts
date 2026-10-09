@@ -6,9 +6,15 @@ export const dynamic = "force-dynamic";
 
 // Every viewer polls this every 30 seconds, and the answer is the same for all of them, so the
 // CDN may share it for a few seconds: at New Year that turns thousands of database reads into a
-// handful. `Age` tells the room how old a shared answer is (see ageSeconds in domain.ts).
-const SHARED = "public, max-age=0, s-maxage=5, stale-while-revalidate=10";
-const PRIVATE = "no-store, max-age=0";
+// handful. Browsers never keep it (`no-store`); the CDN is addressed with its own targeted headers,
+// which take precedence over `Cache-Control` for it (Vercel's own first, then the standard one).
+// `Age` tells the room how old a shared answer is (see ageSeconds in domain.ts).
+const SHARED = {
+  "Cache-Control": "no-store, max-age=0",
+  "CDN-Cache-Control": "public, max-age=5, stale-while-revalidate=10",
+  "Vercel-CDN-Cache-Control": "public, max-age=5, stale-while-revalidate=10",
+};
+const PRIVATE = { "Cache-Control": "no-store, max-age=0" };
 
 /**
  * `?slot=<uuid>` adds that published slot (a relay deep link) wherever it falls.
@@ -20,6 +26,6 @@ export async function GET(request: Request) {
   const slot = params.get("slot") ?? undefined;
   const at = parseSimulation(params.get("at") ?? undefined, undefined)?.at;
   const plain = slot === undefined && at === undefined && ![...params.keys()].length;
-  try { return NextResponse.json(await publicSchedule(slot, at), { headers: { "Cache-Control": plain ? SHARED : PRIVATE } }); }
-  catch { return NextResponse.json({ error: "Schedule unavailable. Please try again shortly." }, { status: 503, headers: { "Cache-Control": PRIVATE } }); }
+  try { return NextResponse.json(await publicSchedule(slot, at), { headers: plain ? SHARED : PRIVATE }); }
+  catch { return NextResponse.json({ error: "Schedule unavailable. Please try again shortly." }, { status: 503, headers: PRIVATE }); }
 }

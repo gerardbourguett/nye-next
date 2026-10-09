@@ -26,6 +26,8 @@ jobs:
       - name: Check the site
         env:
           SITE_URL: ${{ vars.SITE_URL }}
+          # Set the repository variable CATALOG_SYNC to "false" if the daily timezone sync is not set up.
+          CATALOG_SYNC: ${{ vars.CATALOG_SYNC }}
         run: |
           set -uo pipefail
           base="${SITE_URL%/}"
@@ -38,10 +40,11 @@ jobs:
           echo "/health answered ${code}: $(head -c 300 health.json 2>/dev/null)"
           schedule=$(jq -r '.schedule // "invalid"' health.json 2>/dev/null || echo invalid)
           catalog=$(jq -r '.catalog // "invalid"' health.json 2>/dev/null || echo invalid)
-          if [ "${code}" != "200" ] || [ "${schedule}" = "unavailable" ] || [ "${schedule}" = "invalid" ]; then
-            echo "::error::The schedule cannot be read (/health: HTTP ${code}, schedule ${schedule}). The viewing room is down."; failed=1
+          # Only an explicit "ok" passes: unconfigured, unknown or anything unexpected is a problem too.
+          if [ "${code}" != "200" ] || [ "${schedule}" != "ok" ]; then
+            echo "::error::The schedule is not confirmed readable (/health: HTTP ${code}, schedule ${schedule}). The viewing room may be down."; failed=1
           fi
-          if [ "${catalog}" = "stale" ]; then
-            echo "::error::The timezone catalog has not been refreshed for over 48 hours. Check the daily sync."; failed=1
+          if [ "${catalog}" != "ok" ] && [ "${CATALOG_SYNC:-true}" != "false" ]; then
+            echo "::error::The timezone catalog is ${catalog}, not ok: the daily sync has stopped or never ran. Check it, or set the CATALOG_SYNC variable to false."; failed=1
           fi
           exit "${failed}"

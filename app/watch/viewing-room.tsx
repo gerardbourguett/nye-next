@@ -55,7 +55,8 @@ export function ViewingRoom({ requested: initialRequest = null, simulation = nul
       const sentAt = Date.now();
       if (simAt !== null) params.set("at", new Date(readClock({ at: simAt, speed }, anchor.current, sentAt)).toISOString());
       const query = params.size ? `?${params}` : "";
-      const response = await fetch(`/watch/schedule${query}`, { cache: "no-store", credentials: "omit",
+      // Default cache mode: `no-store` would add `Cache-Control: no-cache` to the request and ask the CDN to skip its shared copy.
+      const response = await fetch(`/watch/schedule${query}`, { credentials: "omit",
         signal: AbortSignal.any([controller.signal, AbortSignal.timeout(12_000)]) });
       if (!response.ok) throw new Error("Unavailable");
       const value: unknown = await response.json();
