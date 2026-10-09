@@ -1,5 +1,21 @@
 # Operación: monitoreo, sincronización diaria y registro de cambios
 
+## Rendimiento y carga el 31 de diciembre
+
+- `/watch/schedule`, que cada espectador consulta cada 30 segundos, se comparte en la CDN
+  durante 5 segundos (más 10 de revalidación en segundo plano): miles de espectadores
+  provocan unas pocas lecturas de la base de datos por minuto. Los enlaces profundos
+  (`?slot=`) y las vistas previas (`?at=`) nunca se comparten. La sala corrige el reloj con
+  la cabecera `Age`, de modo que una respuesta compartida no atrasa el horario.
+- `/road-to` comparte 30 segundos, dentro de cada instancia del servidor, la lectura del
+  catálogo de zonas y la de la programación de la edición. Tras publicar una franja, sus
+  enlaces en el relevo pueden tardar hasta 30 segundos más en aparecer.
+- El mapa y las banderas se guardan en caché un día (y se sirven hasta una semana mientras
+  se actualizan): si regenera el mapa (`scripts/generate-map-data.ts`), los visitantes
+  pueden ver el anterior hasta un día.
+- `e2e/performance.spec.ts` limita el JavaScript inicial de cada página a 700 KB (hoy
+  ~520–550 KB). hls.js y dash.js (1,4 MB) solo se cargan al pulsar “Load player”.
+
 ## Monitoreo
 
 - **`/health`** responde en JSON si la programación se puede leer y cuándo se comprobó

@@ -1,9 +1,12 @@
 import "server-only";
 import { supabaseConfig, uncachedFetch } from "../supabase/config";
+import { ttlCache } from "../ttl-cache";
 import { loadCatalog } from "./load-catalog";
 
+// Shared for 30 seconds within a server instance: a burst of visitors costs one read. The open board refreshes every five minutes.
+const relayCatalog = ttlCache<null, Awaited<ReturnType<typeof loadCatalog>>>(() => loadCatalog(supabaseConfig(), uncachedFetch), 30_000);
 export function loadRelayCatalog() {
-  return loadCatalog(supabaseConfig(), uncachedFetch);
+  return relayCatalog(null);
 }
 
 /**
