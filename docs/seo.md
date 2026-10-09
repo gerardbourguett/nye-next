@@ -29,6 +29,9 @@ Las canónicas, el mapa del sitio y la imagen son absolutos. La base sale de, en
 la variable `SITE_URL` (solo un origen: `https://su-dominio.example`, sin ruta), el dominio de
 producción de Vercel (`VERCEL_PROJECT_PRODUCTION_URL`, el mismo en las vistas previas de
 despliegue, para que ninguna se declare canónica) y, por último, `http://localhost:3000`.
+No se usa `VERCEL_URL`: es la dirección de un despliegue concreto y cambiaría con cada
+redespliegue. Si Vercel no expone la variable de dominio de producción (hay que dejar activada
+«Automatically expose System Environment Variables»), cree `SITE_URL`.
 **Si usa un dominio propio, cree `SITE_URL` en Vercel** (Production) y vuelva a desplegar.
 `pnpm check:deployment https://su-sitio` falla si el mapa del sitio, la canónica o la imagen
 no pertenecen al sitio que se está revisando (por ejemplo, un `SITE_URL` atrasado o con un
