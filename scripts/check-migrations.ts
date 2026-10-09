@@ -79,6 +79,40 @@ try {
     try { psql(database, ["-c", `begin; ${slot(length)}; rollback;`], true); } catch { accepted = false; }
     check(accepted === ok, `a slot of ${length} should be ${ok ? "accepted" : "refused"}`);
   }
+
+  // The change log: every insert, update and delete of a slot is recorded by the database itself.
+  const slotJson = options(option("twitch", "vanderfondi"));
+  const insertSlot = (id: string, title: string) => `insert into public.stream_slots (id, title, starts_at, ends_at, options)
+    values (${literal(id)}, ${literal(title)}, timestamptz '2031-01-01 00:00+00', timestamptz '2031-01-01 01:00+00', ${slotJson}::jsonb)`;
+  const SLOT = "0f0f0f0f-0000-4000-8000-000000000001";
+  const logged = psql(database, ["-tA", "-c", `begin;
+    ${insertSlot(SLOT, "Log check")};
+    update public.stream_slots set published = true where id = '${SLOT}';
+    update public.stream_slots set published = true where id = '${SLOT}';
+    delete from public.stream_slots where id = '${SLOT}';
+    select string_agg(operation || ':' || coalesce(changed_by::text, 'none'), ',' order by id)
+      from public.stream_slot_changes where slot_id = '${SLOT}'`]).trim().split("\n").pop();
+  check(logged === "insert:none,update:none,delete:none", `the change log should hold insert, update (a no-op save adds nothing) and delete, got ${logged}`);
+
+  const ADMIN = "0f0f0f0f-0000-4000-8000-0000000000a1";
+  const OTHER = "0f0f0f0f-0000-4000-8000-0000000000b2";
+  const asUser = (user: string) => `set local request.jwt.claim.sub = '${user}'; set local role authenticated;`;
+  const setup = `begin; insert into auth.users (id) values ('${ADMIN}'), ('${OTHER}'); insert into public.stream_admins (user_id) values ('${ADMIN}');`;
+  const slotId = "0f0f0f0f-0000-4000-8000-000000000002";
+  const answer = (sql: string) => psql(database, ["-tA", "-c", sql]).trim().split("\n").pop();
+  check(answer(`${setup} ${asUser(ADMIN)} ${insertSlot(slotId, "By admin")};
+    select changed_by::text from public.stream_slot_changes where slot_id = '${slotId}'`) === ADMIN,
+    "an admin's change should be logged with their user id");
+  check(answer(`${setup} ${asUser(ADMIN)} ${insertSlot(slotId, "By admin")};
+    select count(*) from public.stream_slot_changes`) === "1", "an admin should read the change log");
+  check(answer(`${setup} ${asUser(ADMIN)} ${insertSlot(slotId, "By admin")};
+    reset role; ${asUser(OTHER)} select count(*) from public.stream_slot_changes`) === "0", "a signed-in user who is not an admin should read no log rows");
+  for (const [name, statement] of [["update", "update public.stream_slot_changes set operation = 'delete'"], ["delete", "delete from public.stream_slot_changes"],
+    ["insert", `insert into public.stream_slot_changes (operation, slot_id) values ('insert', '${SLOT}')`]] as const) {
+    let allowed = true;
+    try { psql(database, ["-c", `${setup} ${asUser(ADMIN)} ${statement}`], true); } catch { allowed = false; }
+    check(!allowed, `an admin should not be able to ${name} the change log directly`);
+  }
 } finally {
   psql("postgres", ["-c", `drop database if exists ${database} with (force)`]);
   for (const role of created) psql("postgres", ["-c", `drop role if exists ${role}`]);

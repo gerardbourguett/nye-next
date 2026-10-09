@@ -49,3 +49,28 @@ export function fixtureSlots(now: number) {
       ends_at: iso(hour + 6 * HOUR), published: false, options: [STREAMS.main] },
   ];
 }
+
+/** The signed-in administrator the stand-in Supabase recognises. */
+export const ADMIN = { id: "22222222-2222-4222-8222-0000000000a1", email: "admin@example.test", token: "e2e-admin-token" } as const;
+
+/**
+ * The session cookie `@supabase/ssr` reads: the project's host label names it
+ * (`sb-127-auth-token` for 127.0.0.1) and the value is the session as base64url JSON.
+ */
+export function adminSessionCookie() {
+  const session = {
+    access_token: ADMIN.token, refresh_token: "e2e-refresh", token_type: "bearer", expires_in: 86_400,
+    expires_at: Math.floor(Date.now() / 1000) + 86_400,
+    user: { id: ADMIN.id, aud: "authenticated", role: "authenticated", email: ADMIN.email, app_metadata: {}, user_metadata: {}, created_at: "2026-01-01T00:00:00Z" },
+  };
+  return { name: "sb-127-auth-token", value: `base64-${Buffer.from(JSON.stringify(session)).toString("base64url")}`, domain: "127.0.0.1", path: "/" };
+}
+
+export function fixtureChanges(now: number) {
+  const slot = fixtureSlots(now)[0];
+  return [
+    { id: 3, changed_at: iso(now - 5 * 60_000), changed_by: ADMIN.id, operation: "update", slot_id: slot.id, before: { ...slot, published: false }, after: slot },
+    { id: 2, changed_at: iso(now - 60 * 60_000), changed_by: "33333333-3333-4333-8333-333333333333", operation: "insert", slot_id: slot.id, before: null, after: { ...slot, published: false } },
+    { id: 1, changed_at: iso(now - 2 * HOUR), changed_by: null, operation: "delete", slot_id: "44444444-4444-4444-8444-444444444444", before: { ...slot, title: "Removed rehearsal (test)" }, after: null },
+  ];
+}
