@@ -35,11 +35,24 @@ for (const [path, canonical] of [["/", "/"], ["/road-to", "/road-to"], ["/watch"
 }
 
 for (const path of ["/", "/road-to", "/watch"]) {
-  test(`a preview of ${path} is not canonical and stays out of search results`, async ({ page }) => {
-    await page.goto(`${path}?at=${new Date(Date.UTC(year, 0, 1, 5)).toISOString()}&speed=1`);
+  test(`a preview of ${path} is not canonical, stays out of search results and is shared as the simulated edition`, async ({ page, request }) => {
+    // The edition after the real one: the root layout's own titles would be wrong for it.
+    const next = editionTag(year + 1);
+    await page.goto(`${path}?at=${new Date(Date.UTC(year + 1, 0, 1, 5)).toISOString()}&speed=1`);
     await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", /noindex/);
     await expect(page.locator('link[rel="canonical"]')).toHaveCount(0);
     await expect(page.locator('script[type="application/ld+json"]')).toHaveCount(0);
+    await expect(page.locator('meta[property="og:title"]')).toHaveAttribute("content", new RegExp(next));
+    await expect(page.locator('meta[name="twitter:title"]')).toHaveAttribute("content", new RegExp(next));
+    await expect(page.locator('meta[name="twitter:card"]')).toHaveAttribute("content", "summary_large_image");
+    // Still shared with an image (one of each), and the images load.
+    await expect(page.locator('meta[property="og:image"]')).toHaveCount(1);
+    await expect(page.locator('meta[name="twitter:image"]')).toHaveCount(1);
+    for (const property of ['meta[property="og:image"]', 'meta[name="twitter:image"]']) {
+      const url = await page.locator(property).getAttribute("content");
+      expect(url, property).toContain(ORIGIN);
+      expect((await request.get(url!)).status(), property).toBe(200);
+    }
   });
 }
 

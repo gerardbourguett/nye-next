@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { editionTag, editionYear } from "@/lib/edition";
 import { requestEdition } from "@/lib/edition-server";
 import { siteUrl } from "@/lib/site";
+import { previewSocial } from "@/lib/preview-metadata";
 import { parseSimulation } from "@/lib/relay-clock";
 import { Countdown } from "./countdown";
 
@@ -16,7 +17,7 @@ export async function generateMetadata({ searchParams }: PageProps<"/">): Promis
   return {
     title: { absolute: `${tag} (preview)` },
     description: `A preview of ${tag} at a simulated time.`,
-    openGraph: { title: `${tag} (preview)`, description: `A preview of ${tag} at a simulated time.`, siteName: tag },
+    ...previewSocial(tag, `${tag} (preview)`, `A preview of ${tag} at a simulated time.`, { images: false }),
     robots: { index: false, follow: false },
   };
 }
