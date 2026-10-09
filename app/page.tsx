@@ -17,7 +17,7 @@ export async function generateMetadata({ searchParams }: PageProps<"/">): Promis
   return {
     title: { absolute: `${tag} (preview)` },
     description: `A preview of ${tag} at a simulated time.`,
-    ...previewSocial(tag, `${tag} (preview)`, `A preview of ${tag} at a simulated time.`, { images: false }),
+    ...previewSocial(editionYear(simulation.at), `${tag} (preview)`, `A preview of ${tag} at a simulated time.`),
     robots: { index: false, follow: false },
   };
 }

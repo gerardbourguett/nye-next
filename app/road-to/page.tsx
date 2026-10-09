@@ -25,7 +25,7 @@ export async function generateMetadata({ searchParams }: PageProps<"/road-to">):
     description,
     // A preview is not the page: no canonical, and out of search results.
     ...(simulation
-      ? { robots: { index: false, follow: false }, ...previewSocial(editionTag(year), previewTitle, description) }
+      ? { robots: { index: false, follow: false }, ...previewSocial(year, previewTitle, description) }
       : { alternates: { canonical: "/road-to" } }),
   };
 }

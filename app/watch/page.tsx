@@ -16,7 +16,7 @@ export async function generateMetadata({ searchParams }: PageProps<"/watch">): P
   if (simulation) {
     const edition = editionTag(editionYear(simulation.at));
     const title = `Viewing room (preview) | ${edition}`;
-    return { title: { absolute: title }, robots: { index: false, follow: false }, ...previewSocial(edition, title, `A preview of the ${edition} viewing room at a simulated time.`) };
+    return { title: { absolute: title }, robots: { index: false, follow: false }, ...previewSocial(editionYear(simulation.at), title, `A preview of the ${edition} viewing room at a simulated time.`) };
   }
   return {
     title: "Viewing room",

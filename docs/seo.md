@@ -11,7 +11,7 @@
   solo enseña a ignorarla).
 - **Canónicas:** `/`, `/road-to` y `/watch`. Los enlaces profundos del relevo
   (`/watch?slot=…&stream=…`) apuntan a `/watch`.
-- **Vistas previas** (`?at=&speed=`): `noindex, nofollow`, sin canónica ni datos estructurados.
+- **Vistas previas** (`?at=&speed=`): `noindex, nofollow`, sin canónica ni datos estructurados, y se comparten con el título y la imagen de la edición simulada (`/share-image?year=`; las imágenes `/opengraph-image` y `/twitter-image` siguen el reloj real).
 - **Endpoints de datos** (`/health`, `/watch/live`, `/watch/schedule`) y `/admin`: cabecera
   `X-Robots-Tag: noindex` (el admin, desde `proxy.ts`).
 - **Imagen para compartir** (`/opengraph-image` y `/twitter-image`, `lib/og-image.tsx`): 1200×630,
@@ -30,8 +30,10 @@ la variable `SITE_URL` (solo un origen: `https://su-dominio.example`, sin ruta),
 producción de Vercel (`VERCEL_PROJECT_PRODUCTION_URL`, el mismo en las vistas previas de
 despliegue, para que ninguna se declare canónica) y, por último, `http://localhost:3000`.
 **Si usa un dominio propio, cree `SITE_URL` en Vercel** (Production) y vuelva a desplegar.
-`pnpm check:deployment https://su-sitio` falla si el mapa del sitio o la canónica apuntan a
-localhost.
+`pnpm check:deployment https://su-sitio` falla si el mapa del sitio, la canónica o la imagen
+no pertenecen al sitio que se está revisando (por ejemplo, un `SITE_URL` atrasado o con un
+error de tipeo). Si revisa la dirección propia de un despliegue y es normal que las
+direcciones apunten a su dominio, pase ese dominio con `--site=https://su-dominio`.
 
 ## Después de desplegar (lo que debe hacer usted)
 

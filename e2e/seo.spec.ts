@@ -50,11 +50,22 @@ for (const path of ["/", "/road-to", "/watch"]) {
     await expect(page.locator('meta[name="twitter:image"]')).toHaveCount(1);
     for (const property of ['meta[property="og:image"]', 'meta[name="twitter:image"]']) {
       const url = await page.locator(property).getAttribute("content");
-      expect(url, property).toContain(ORIGIN);
-      expect((await request.get(url!)).status(), property).toBe(200);
+      // Drawn for the simulated edition: the real-time image routes would show the wrong year.
+      expect(url, property).toBe(`${ORIGIN}/share-image?year=${year + 1}`);
+      const image = await request.get(url!);
+      expect(image.status(), property).toBe(200);
+      expect(image.headers()["content-type"], property).toBe("image/png");
     }
   });
 }
+
+test("the share image for an edition is bounded to a valid year", async ({ request }) => {
+  const ok = await request.get("/share-image?year=2099");
+  expect([ok.status(), ok.headers()["content-type"]]).toEqual([200, "image/png"]);
+  for (const query of ["", "?year=abc", "?year=1999", "?year=2101", "?year=20270", "?year=2027.5"]) {
+    expect((await request.get(`/share-image${query}`)).status(), query).toBe(400);
+  }
+});
 
 test("sharing a link shows an image, a title and a large card", async ({ page, request }) => {
   await page.goto("/");

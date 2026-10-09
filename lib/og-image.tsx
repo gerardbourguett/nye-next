@@ -6,13 +6,19 @@ import { requestEdition } from "@/lib/edition-server";
 export const SHARE_ALT = "Midnight is a 26-hour relay: follow New Year across every timezone.";
 export const SHARE_SIZE = { width: 1200, height: 630 };
 
+/** A year the image may show: a whole number in the range the site supports (the same as a preview's). */
+export function parseShareYear(value: string | null): number | null {
+  return value !== null && /^\d{4}$/.test(value) && Number(value) >= 2000 && Number(value) <= 2100 ? Number(value) : null;
+}
+
 /**
  * The image shown when a link is shared (Open Graph and Twitter cards). It
- * names the edition in force at request time and promises nothing else: no
- * lineup, no dates and no audience figures.
+ * names the edition in force at request time, or the one asked for (a preview
+ * of another edition), and promises nothing else: no lineup, no dates and no
+ * audience figures.
  */
-export async function shareImage() {
-  const tag = editionTag(await requestEdition());
+export async function shareImage(edition?: number) {
+  const tag = editionTag(edition ?? await requestEdition());
   const year = tag.replace(/Live$/, "");
   return new ImageResponse(
     (

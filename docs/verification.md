@@ -18,6 +18,8 @@ lleguen al servidor y ejecute:
 
 ```sh
 pnpm check:deployment https://su-sitio --require-providers
+# --site=https://su-dominio : el origen que deben llevar las canónicas y el mapa del sitio,
+#                            si no es el de la dirección que se revisa
 ```
 
 Comprueba que las páginas (y sus vistas previas `?at=&speed=`) respondan, que `robots.txt`, el mapa del sitio, la canónica y la imagen para compartir sean correctos (`docs/seo.md`), que la
