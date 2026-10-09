@@ -1,3 +1,5 @@
+import { editionYear } from "./edition";
+
 /**
  * Simulated time for previewing the site before (or after) the night:
  * `?at=<ISO instant>&speed=<1–3600>` on `/`, `/road-to` and `/watch`. Pure,
@@ -7,6 +9,17 @@ export type Simulation = { at: number; speed: number };
 
 const MIN = Date.UTC(2000, 0, 1);
 const MAX = Date.UTC(2101, 0, 1);
+
+/** The first and last edition a valid simulation can show (the last, 2101, starts at noon UTC on 1 January 2100). */
+export const MIN_EDITION_YEAR = editionYear(MIN);
+export const MAX_EDITION_YEAR = editionYear(MAX - 1);
+
+/** An edition year a simulation can show, from text (`?year=2028`), or null. Derived from the simulation's own bounds so the two cannot drift apart. */
+export function parseEditionYear(value: string | null): number | null {
+  if (value === null || !/^\d{4}$/.test(value)) return null;
+  const year = Number(value);
+  return year >= MIN_EDITION_YEAR && year <= MAX_EDITION_YEAR ? year : null;
+}
 export const MAX_SPEED = 3_600;
 
 export function parseSimulation(at: unknown, speed: unknown): Simulation | null {

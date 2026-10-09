@@ -60,9 +60,12 @@ for (const path of ["/", "/road-to", "/watch"]) {
 }
 
 test("the share image for an edition is bounded to a valid year", async ({ request }) => {
-  const ok = await request.get("/share-image?year=2099");
-  expect([ok.status(), ok.headers()["content-type"]]).toEqual([200, "image/png"]);
-  for (const query of ["", "?year=abc", "?year=1999", "?year=2101", "?year=20270", "?year=2027.5"]) {
+  // Both ends of what a preview can show (the last edition, 2101, starts in 2100).
+  for (const year of [2000, 2099, 2101]) {
+    const ok = await request.get(`/share-image?year=${year}`);
+    expect([year, ok.status(), ok.headers()["content-type"]]).toEqual([year, 200, "image/png"]);
+  }
+  for (const query of ["", "?year=abc", "?year=1999", "?year=2102", "?year=20270", "?year=2027.5"]) {
     expect((await request.get(`/share-image${query}`)).status(), query).toBe(400);
   }
 });
