@@ -4,4 +4,7 @@ export const alt = SHARE_ALT;
 export const size = SHARE_SIZE;
 export const contentType = "image/png";
 
-export default shareImage;
+// Next passes its own props to this function: `shareImage` must not receive them as the edition.
+export default async function Image() {
+  return shareImage();
+}

@@ -97,3 +97,14 @@ test("the data endpoints are marked noindex", async ({ request }) => {
     expect((await request.get(path)).headers()["x-robots-tag"], path).toBe("noindex");
   }
 });
+
+test("the real-time share images draw the edition in force, the same as /share-image for that year", async ({ request }) => {
+  // The images are deterministic, so the same bytes mean the same picture: it cannot be "#[object Object]Live" or another year.
+  const bytes = async (path: string) => Buffer.from(await (await request.get(path)).body());
+  const expected = await bytes(`/share-image?year=${year}`);
+  expect(expected.length).toBeGreaterThan(2_000);
+  for (const path of ["/opengraph-image", "/twitter-image"]) {
+    expect(Buffer.compare(await bytes(path), expected), path).toBe(0);
+  }
+  expect(Buffer.compare(await bytes(`/share-image?year=${year + 1}`), expected), "another year draws another picture").not.toBe(0);
+});

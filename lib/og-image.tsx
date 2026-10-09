@@ -18,7 +18,8 @@ export function parseShareYear(value: string | null): number | null {
  * audience figures.
  */
 export async function shareImage(edition?: number) {
-  const tag = editionTag(edition ?? await requestEdition());
+  // Only a number is an edition: Next calls a metadata image function with its own props object.
+  const tag = editionTag(typeof edition === "number" ? edition : await requestEdition());
   const year = tag.replace(/Live$/, "");
   return new ImageResponse(
     (
