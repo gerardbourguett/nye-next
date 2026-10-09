@@ -58,3 +58,9 @@ test("a crossing lists its streams by start time, then label", () => {
     ["1:Harbour fireworks", "1:Melbourne", "2:Harbour fireworks"]);
   assert.equal(watchHref(streams[660][0]), `/watch?slot=${streams[660][0].slotId}&stream=youtube_channel%3AUCabcdefghijklmnopqrstuv`);
 });
+
+test("watchHref carries a preview's query", () => {
+  const stream = { slotId: "11111111-1111-4111-8111-000000000003", key: "youtube:abcdefghijk" };
+  assert.equal(watchHref(stream, "at=2026-12-31T10%3A00%3A00.000Z&speed=60"),
+    `/watch?slot=${stream.slotId}&stream=youtube%3Aabcdefghijk&at=2026-12-31T10%3A00%3A00.000Z&speed=60`);
+});

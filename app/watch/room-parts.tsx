@@ -10,6 +10,7 @@ import {
 import type { LiveInfo } from "@/lib/streams/live-parse";
 import { cityFromZoneName } from "@/lib/zones";
 import styles from "@/components/streams/surface.module.css";
+import { watchHref } from "@/lib/streams/relay-link";
 
 export type LiveMap = Record<string, LiveInfo>;
 const TWITCH_CHAT_MIN_WIDTH = 350;
@@ -55,8 +56,8 @@ export function CopyAddress({ address }: { address: string }) {
 }
 
 /** A card opens the provider's page; direct streams open in the room, which can play them. */
-const cardLink = (slot: Slot, stream: StreamOption) => stream.provider === "hls" || stream.provider === "dash"
-  ? { href: `/watch?${new URLSearchParams({ slot: slot.id, stream: optionKey(stream) })}` }
+const cardLink = (slot: Slot, stream: StreamOption, preview?: string) => stream.provider === "hls" || stream.provider === "dash"
+  ? { href: watchHref({ slotId: slot.id, key: optionKey(stream) }, preview) }
   : { href: providerUrl(stream), target: "_blank", rel: "noopener noreferrer" };
 
 const compact = new Intl.NumberFormat(undefined, { notation: "compact", maximumFractionDigits: 1 });
@@ -210,7 +211,8 @@ export function ChatPanel({ option, info, browser, dark }: {
 }
 
 /** Upcoming slots as schedule cards, each with its streams. */
-export function ComingUp({ upcoming, live, loaded }: { upcoming: Slot[]; live: LiveMap; loaded: boolean }) {
+/** `preview` is a preview's query (`at=…&speed=…`), kept on the cards that open the room. */
+export function ComingUp({ upcoming, live, loaded, preview }: { upcoming: Slot[]; live: LiveMap; loaded: boolean; preview?: string }) {
   return <section className={styles.section} aria-labelledby="upcoming-slots">
     <div className={styles.sectionHeading}><h2 id="upcoming-slots">Coming up</h2>
       <p className={styles.muted}>Your local time · Next 14 days · Refreshes every 30 seconds</p></div>
@@ -221,7 +223,7 @@ export function ComingUp({ upcoming, live, loaded }: { upcoming: Slot[]; live: L
       </p>
       <h3>{item.title}</h3>
       <ul className={styles.cardStreams}>{item.options.map((stream) => <li key={optionKey(stream)}>
-        <a {...cardLink(item, stream)} className={styles.cardStream}>
+        <a {...cardLink(item, stream, preview)} className={styles.cardStream}>
           <Avatar option={stream} info={live[optionKey(stream)]} />
           <span className={styles.channelText}>
             <span className={styles.channelName}>{stream.label}</span>

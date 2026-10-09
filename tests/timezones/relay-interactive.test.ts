@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { getRelayBands } from "../../data/relay";
-import { formatRemaining, MAX_SPEED, parseSimulation, readClock, simulationHref } from "../../lib/relay-clock";
+import { formatRemaining, MAX_SPEED, parseSimulation, readClock, simulationHref, simulationQuery } from "../../lib/relay-clock";
 import { cityFromZoneName } from "../../lib/zones";
 
 test("each crossing headlines its best-known place, by zone rather than offset", () => {
@@ -46,4 +46,11 @@ test("remaining time formats with days and clamps at zero", () => {
   assert.equal(formatRemaining(3_723_000), "01:02:03");
   assert.equal(formatRemaining(90_061_000), "1d 01:01:01");
   assert.equal(cityFromZoneName("America/Sao_Paulo"), "São Paulo");
+});
+
+test("a simulation travels between pages as the same query", () => {
+  const at = Date.UTC(2026, 11, 31, 10);
+  assert.equal(simulationQuery(at, 60), "at=2026-12-31T10%3A00%3A00.000Z&speed=60");
+  assert.equal(simulationHref(at, 60, "/watch"), "/watch?at=2026-12-31T10%3A00%3A00.000Z&speed=60");
+  assert.equal(simulationHref(at, 60), "/road-to?at=2026-12-31T10%3A00%3A00.000Z&speed=60");
 });

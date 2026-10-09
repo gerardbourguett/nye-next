@@ -2,9 +2,11 @@
 
 import NumberFlow from "@number-flow/react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
 
+import { SimulationNotice } from "@/components/simulation-notice";
 import { editionYear } from "@/lib/edition";
+import { simulationHref, type Simulation } from "@/lib/relay-clock";
+import { useClock } from "@/lib/use-clock";
 
 type CountdownState = {
   /** The edition being counted down to, re-derived on every tick. */
@@ -22,8 +24,7 @@ type CountdownState = {
 // Both anchors are local-time calendar dates: the countdown targets the
 // viewer's own new year, not UTC. Only read inside effects, so the server and
 // client markup can't disagree.
-function readCountdown(): CountdownState {
-  const now = Date.now();
+function readCountdown(now: number): CountdownState {
   const year = editionYear(now);
   const start = new Date(year - 1, 0, 1, 0, 0, 0, 0).getTime();
   const target = new Date(year, 0, 1, 0, 0, 0, 0).getTime();
@@ -40,17 +41,12 @@ function readCountdown(): CountdownState {
   };
 }
 
-export function Countdown({ initialYear }: { initialYear: number }) {
+export function Countdown({ initialYear, simulation }: { initialYear: number; simulation: Simulation | null }) {
   // null until mounted, so the first client render matches the server output.
-  const [countdown, setCountdown] = useState<CountdownState | null>(null);
-
-  useEffect(() => {
-    const tick = () => setCountdown(readCountdown());
-
-    tick();
-    const interval = setInterval(tick, 1000);
-    return () => clearInterval(interval);
-  }, []);
+  const now = useClock(simulation);
+  const countdown = now === null ? null : readCountdown(now);
+  // A preview carries its simulated instant to the other pages.
+  const carry = (path: string) => (simulation ? simulationHref(now ?? simulation.at, simulation.speed, path) : path);
 
   const units = [
     { label: "Days", value: countdown?.days },
@@ -78,6 +74,8 @@ export function Countdown({ initialYear }: { initialYear: number }) {
         }}
       />
 
+      {simulation && <SimulationNotice simulation={simulation} now={now} exitHref="/" className="w-full max-w-3xl" />}
+
       <header className="flex flex-col items-center gap-6 text-center">
         <h1 className="text-6xl font-semibold tracking-tighter text-balance sm:text-8xl">
           #{year}
@@ -93,13 +91,13 @@ export function Countdown({ initialYear }: { initialYear: number }) {
           className="flex flex-wrap justify-center gap-x-8 gap-y-3"
         >
           <Link
-            href="/road-to"
+            href={carry("/road-to")}
             className="text-xs tracking-[0.2em] text-muted-foreground uppercase underline decoration-dotted underline-offset-4 transition-colors hover:text-foreground"
           >
             See the relay →
           </Link>
           <Link
-            href="/watch"
+            href={carry("/watch")}
             className="text-xs tracking-[0.2em] text-muted-foreground uppercase underline decoration-dotted underline-offset-4 transition-colors hover:text-foreground"
           >
             Enter the viewing room →

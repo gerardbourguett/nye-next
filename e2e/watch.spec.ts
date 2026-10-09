@@ -1,4 +1,5 @@
-import { IDS, STREAMS } from "./fixtures";
+import { resolveRolloverArrival } from "../data/relay";
+import { crossingYear, IDS, STREAMS } from "./fixtures";
 
 const PLAYLIST = "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:6\n#EXT-X-MEDIA-SEQUENCE:0\n#EXTINF:6.0,\nseg0.ts\n";
 const CORS = { "access-control-allow-origin": "*" };
@@ -156,6 +157,8 @@ test("with the browser's own HLS player (no hls.js), closing the player pauses a
   await page.goto("/watch");
   await channel(page, STREAMS.direct.label).click();
   await page.getByRole("button", { name: "Load HLS player" }).click();
+  // Closing before the native source is attached would test nothing: wait until playback has really started.
+  await expect(page.locator("video")).toHaveAttribute("src", /index\.m3u8/);
   await page.getByRole("button", { name: "Close player" }).click();
   await expect(page.locator("video")).toHaveCount(0);
   await expect.poll(() => page.evaluate(() => (window as unknown as { __paused: boolean }).__paused)).toBe(true);
@@ -203,4 +206,54 @@ test("when the video element itself errors, the player is released and stops pol
   const settled = playlistRequests;
   await page.waitForTimeout(3_500);
   expect(playlistRequests, "no more playlist requests after the failure view").toBeLessThanOrEqual(settled + 1);
+});
+
+test("a preview reads the schedule as of the simulated instant and shows no provider status", async ({ page }) => {
+  const sydney = resolveRolloverArrival("Australia/Sydney", crossingYear(Date.now())).arrivalUtcMs;
+  let asked = 0;
+  await page.route("**/watch/live?**", (route) => { asked++; return route.fulfill({ json: { live: {}, providers: {} } }); });
+  // Five minutes before Sydney's midnight, a slot that is hours or months away in real time.
+  await page.goto(`/watch?at=${new Date(sydney - 5 * 60_000).toISOString()}&speed=1`);
+  await expect(page.getByRole("status").filter({ hasText: "Preview" })).toContainText("Nothing here is live.");
+  await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", /noindex/);
+  await expect(page).toHaveTitle(/^Viewing room \(preview\) \| #\d{4}Live$/);
+  await expect(page.getByRole("link", { name: "Back to the relay" })).toHaveAttribute("href", /^\/road-to\?at=.*&speed=1$/);
+  await expect(rail(page)).toContainText(STREAMS.sydney.label);
+  await expect(rail(page).getByText("Live", { exact: true })).toHaveCount(0);
+  expect(asked).toBe(0);
+  await page.getByRole("link", { name: "Back to real time" }).click();
+  await expect(page).toHaveURL(/\/watch$/);
+  await expect(rail(page)).toContainText("Rehearsal on now (test)");
+});
+
+test("leaving a preview drops what the preview had loaded, even if the real schedule is down", async ({ page, consoleErrors }) => {
+  const sydney = resolveRolloverArrival("Australia/Sydney", crossingYear(Date.now())).arrivalUtcMs;
+  await page.goto(`/watch?at=${new Date(sydney - 5 * 60_000).toISOString()}&speed=1`);
+  await expect(rail(page)).toContainText(STREAMS.sydney.label);
+  // The real schedule cannot be read: nothing from the preview may stand in for it.
+  await page.route("**/watch/schedule**", (route) => route.fulfill({ status: 503, json: { error: "down" } }));
+  await page.getByRole("link", { name: "Back to real time" }).click();
+  await expect(page).toHaveURL(/\/watch$/);
+  await expect(page.getByText("Nothing here is live.")).toHaveCount(0);
+  await expect(page.getByText(STREAMS.sydney.label)).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "The schedule is unavailable" })).toBeVisible();
+  // The failed request is the point of the test; nothing else may fail.
+  consoleErrors.splice(0, consoleErrors.length, ...consoleErrors.filter((text) => !/Failed to load resource/.test(text)));
+});
+
+test("a preview keeps its clock on the cards that open a direct stream in the room", async ({ page }) => {
+  await page.goto(`/watch?at=${new Date().toISOString()}&speed=1`);
+  const card = page.getByRole("region", { name: "Coming up" }).getByRole("link", { name: new RegExp(STREAMS.direct.label.replace(/[()]/g, "\\$&")) });
+  await expect(card).toHaveAttribute("href", new RegExp(`^/watch\\?slot=${IDS.next}&stream=hls%3A.+&at=.+&speed=1$`));
+});
+
+test("a preview's clock keeps advancing through a slow schedule response", async ({ page }) => {
+  const at = Date.UTC(2026, 11, 31, 10);
+  // Answer after 1.5 s: at 3600x that is 1.5 simulated hours the clock must not lose.
+  await page.route("**/watch/schedule**", async (route) => { await new Promise((resolve) => setTimeout(resolve, 1_500)); await route.continue(); });
+  await page.goto(`/watch?at=${new Date(at).toISOString()}&speed=3600`);
+  const clock = page.getByRole("status").filter({ hasText: "Preview" }).locator("xpath=following-sibling::p").locator("time");
+  await expect(clock).toBeVisible();
+  const shown = Date.parse((await clock.getAttribute("datetime")) ?? "");
+  expect(shown - at).toBeGreaterThanOrEqual(3_600_000);
 });

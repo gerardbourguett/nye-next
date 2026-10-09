@@ -15,7 +15,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { cn } from "@/lib/utils";
 import { editionTag, editionYear } from "@/lib/edition";
-import { readClock, simulationHref, type Simulation } from "@/lib/relay-clock";
+import { readClock, simulationHref, simulationQuery, type Simulation } from "@/lib/relay-clock";
 import { providerName } from "@/lib/streams/domain";
 import {
   watchHref,
@@ -61,9 +61,11 @@ function formatSlotLocal(iso: string, withDate: boolean) {
 function BandStreams({
   list,
   now,
+  simulation,
 }: {
   list: CrossingStream[];
   now: number | null;
+  simulation: Simulation | null;
 }) {
   return (
     <div className={styles.bandStreams}>
@@ -78,7 +80,7 @@ function BandStreams({
               {ended ? (
                 <span className={styles.streamEnded}>{stream.label}</span>
               ) : (
-                <Link className={styles.streamLink} href={watchHref(stream)}>
+                <Link className={styles.streamLink} href={watchHref(stream, simulation ? simulationQuery(now ?? simulation.at, simulation.speed) : undefined)}>
                   <Play size={14} aria-hidden="true" /> {stream.label}
                 </Link>
               )}
@@ -338,11 +340,11 @@ export function RelayBoard({
             </div>
           )}
           <nav className={styles.navigation} aria-label="Relay navigation">
-            <Link href="/" className={styles.brand}>
+            <Link href={simulation ? simulationHref(now ?? simulation.at, simulation.speed, "/") : "/"} className={styles.brand}>
               <ArrowLeft size={18} aria-hidden="true" /> {editionTag(year)}
             </Link>
             <a
-              href="/watch"
+              href={simulation ? simulationHref(now ?? simulation.at, simulation.speed, "/watch") : "/watch"}
               className={styles.channelLink}
             >
               Enter viewing room <ArrowUpRight size={18} aria-hidden="true" />
@@ -441,7 +443,7 @@ export function RelayBoard({
             </p>
             {nextStream && (
               <p className={styles.overviewNote}>
-                <Link className={styles.streamLink} href={watchHref(nextStream)}>
+                <Link className={styles.streamLink} href={watchHref(nextStream, simulation ? simulationQuery(now ?? simulation.at, simulation.speed) : undefined)}>
                   <Play size={14} aria-hidden="true" /> Watch {nextStream.label}
                 </Link>
               </p>
@@ -638,7 +640,7 @@ export function RelayBoard({
                         </p>
                       </details>
                     )}
-                    {bandStreams && <BandStreams list={bandStreams} now={now} />}
+                    {bandStreams && <BandStreams list={bandStreams} now={now} simulation={simulation} />}
                   </div>
                   <div className={styles.arrival}>
                     {now !== null ? (
