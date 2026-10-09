@@ -74,7 +74,8 @@ http.createServer((request, response) => {
     return send(200, { id: ADMIN.id, aud: "authenticated", role: "authenticated", email: ADMIN.email, app_metadata: {}, user_metadata: {}, created_at: "2026-01-01T00:00:00Z" });
   }
   // No persisted catalog: the relay falls back to the bundled one.
-  if (url.pathname === "/rest/v1/timezone_catalog") return send(200, []);
+  // `/health` asks only for when it was last checked; the relay's full read finds no row.
+  if (url.pathname === "/rest/v1/timezone_catalog") return send(200, url.searchParams.get("select") === "checked_at" ? [{ checked_at: new Date().toISOString() }] : []);
   if (url.pathname.startsWith("/auth/v1/")) return send(401, { code: 401, message: "No session in tests" });
   send(404, { message: "Not mocked" });
 }).listen(MOCK_PORT, "127.0.0.1", () => console.log(`Supabase mock on ${MOCK_PORT}`));

@@ -16,7 +16,7 @@ test.describe("signed in as an administrator", () => {
     await expect(page.getByRole("heading", { level: 1, name: "Schedule manager." })).toBeVisible();
     const saved = page.getByRole("region", { name: "Saved slots" });
     await expect(saved.getByRole("heading", { name: "Rehearsal on now (test)" })).toBeVisible();
-    await expect(saved.getByRole("heading", { name: "Draft (test)" })).toBeVisible();
+    await expect(saved.getByRole("heading", { name: "Draft (test)", exact: true })).toBeVisible();
     await expect(saved).toContainText("Private draft");
   });
 
@@ -39,9 +39,11 @@ test.describe("signed in as an administrator", () => {
   });
 
   test("saves a draft with a direct stream", async ({ page }) => {
+    // The stand-in keeps writes in memory for the whole run (desktop and mobile share it), so each run uses its own title.
+    const title = `Admin draft ${Date.now()} (test)`;
     await page.goto("/admin");
     const editor = page.getByRole("region", { name: "Create a slot" });
-    await editor.getByLabel("Slot title").fill("Admin draft (test)");
+    await editor.getByLabel("Slot title").fill(title);
     await editor.getByLabel(/^Start time/).fill("2031-01-01T10:00");
     await editor.getByLabel("Provider").selectOption("hls");
     await editor.getByLabel("HLS playlist address (.m3u8)").fill("https://cdn.example.test/live/index.m3u8");
@@ -49,7 +51,7 @@ test.describe("signed in as an administrator", () => {
     await editor.getByRole("button", { name: "Save draft" }).click();
     await expect(editor.getByRole("status")).toContainText("Draft saved");
     await page.reload();
-    await expect(page.getByRole("region", { name: "Saved slots" }).getByRole("heading", { name: "Admin draft (test)" })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Saved slots" }).getByRole("heading", { name: title, exact: true })).toBeVisible();
   });
 
   test("reads an .m3u list and fills the option from a chosen channel", async ({ page }) => {

@@ -43,3 +43,10 @@ test("a preview past midnight says the new year is here, then moves on to the ne
   // The tab names the simulated edition too, not the real one.
   await expect(page).toHaveTitle(`${editionTag(year + 1)} (preview)`);
 });
+
+test("/health reports a readable schedule and a fresh catalog, without secrets", async ({ request }) => {
+  const response = await request.get("/health");
+  expect(response.status()).toBe(200);
+  expect(response.headers()["cache-control"]).toContain("no-store");
+  expect(await response.json()).toEqual({ status: "ok", schedule: "ok", catalog: "ok", catalogAgeHours: 0 });
+});

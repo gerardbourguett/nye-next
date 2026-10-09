@@ -54,6 +54,17 @@ async function main() {
     else fail(`home heading reads ${JSON.stringify(heading ?? null)}, expected ${expected}`);
   } catch { /* reported above */ }
 
+  try {
+    const { status, body } = await get("/health");
+    const health = JSON.parse(body) as { status?: string; schedule?: string; catalog?: string; catalogAgeHours?: number | null };
+    if (status !== 200 || health.schedule !== "ok") fail(`/health says the schedule is not readable (HTTP ${status}, schedule ${health.schedule})`);
+    else ok("/health: the schedule is readable");
+    if (health.catalog === "ok") ok(`/health: the timezone catalog was checked ${health.catalogAgeHours} hours ago`);
+    else (health.catalog === "stale" ? fail : warn)(`/health: timezone catalog is ${health.catalog}${health.catalog === "stale" ? " (the daily sync has stopped)" : " (the daily sync is not set up here)"}`);
+  } catch (error) {
+    fail(`/health is not readable: ${error instanceof Error ? error.message : error}`);
+  }
+
   const keys = new Set<string>([`twitch:${MAIN_CHANNEL}`]);
   try {
     const { status, body } = await get("/watch/schedule");
