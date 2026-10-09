@@ -20,6 +20,12 @@ if (!target || !/^https?:\/\//.test(target)) {
 }
 const base = new URL(target);
 const requireProviders = flags.includes("--require-providers");
+// The origin the canonical links and the sitemap must carry: the one being checked, unless told otherwise
+// (for example `--site=https://www.example.com` when checking a deployment's own address before a custom domain is live).
+const siteFlag = flags.find((flag) => flag.startsWith("--site="))?.slice("--site=".length);
+const expectedOrigin = (() => {
+  try { return new URL(siteFlag ?? base.origin).origin; } catch { console.error(`Invalid --site value: ${siteFlag}`); process.exit(2); }
+})();
 let failures = 0;
 const ok = (message: string) => console.log(`ok    ${message}`);
 const warn = (message: string) => console.log(`warn  ${message}`);
@@ -63,6 +69,33 @@ async function main() {
     else (health.catalog === "stale" ? fail : warn)(`/health: timezone catalog is ${health.catalog}${health.catalog === "stale" ? " (the daily sync has stopped)" : " (the daily sync is not set up here)"}`);
   } catch (error) {
     fail(`/health is not readable: ${error instanceof Error ? error.message : error}`);
+  }
+
+  // What search engines and link previews read.
+  try {
+    const originOf = (value: string | undefined) => { try { return value ? new URL(value).origin : undefined; } catch { return undefined; } };
+    const robots = await get("/robots.txt");
+    if (robots.status === 200 && robots.body.includes("Disallow: /admin") && /^Sitemap: https?:\/\//m.test(robots.body)) ok("/robots.txt keeps /admin out and names the sitemap");
+    else fail("/robots.txt is missing, or does not disallow /admin and name the sitemap");
+    const sitemap = await get("/sitemap.xml");
+    const locs = [...sitemap.body.matchAll(/<loc>([^<]+)<\/loc>/g)].map((match) => match[1]);
+    if (sitemap.status !== 200 || locs.length < 3) fail(`/sitemap.xml lists ${locs.length} page(s)`);
+    else if (locs.some((loc) => originOf(loc) !== expectedOrigin)) fail(`/sitemap.xml lists addresses outside ${expectedOrigin} (e.g. ${locs.find((loc) => originOf(loc) !== expectedOrigin)}): set SITE_URL to the site's real address, or pass --site=<origin> if that is intended`);
+    else ok(`/sitemap.xml lists ${locs.length} pages on ${expectedOrigin}`);
+    const home = (await get("/")).body;
+    const canonical = /<link rel="canonical" href="([^"]+)"/.exec(home)?.[1];
+    if (!canonical || originOf(canonical) !== expectedOrigin) fail(`the home page canonical link is ${canonical ?? "missing"}, not on ${expectedOrigin}: set SITE_URL, or pass --site=<origin> if that is intended`);
+    else ok(`home canonical link: ${canonical}`);
+    const image = /<meta property="og:image" content="([^"]+)"/.exec(home)?.[1];
+    if (!image) fail("the home page has no og:image");
+    else if (originOf(image) !== expectedOrigin) fail(`the share image address is ${image}, not on ${expectedOrigin}`);
+    else {
+      const response = await fetch(image, { signal: AbortSignal.timeout(20_000) });
+      if (response.status === 200 && response.headers.get("content-type") === "image/png") ok("the share image (og:image) loads as a PNG");
+      else fail(`the share image answered ${response.status} (${response.headers.get("content-type")}) at ${image}`);
+    }
+  } catch (error) {
+    fail(`the search and share checks failed: ${error instanceof Error ? error.message : error}`);
   }
 
   const keys = new Set<string>([`twitch:${MAIN_CHANNEL}`]);

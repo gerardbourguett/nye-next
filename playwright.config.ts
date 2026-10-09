@@ -7,6 +7,8 @@ import { APP_PORT, MOCK_PORT } from "./e2e/fixtures";
 const env = {
   NEXT_PUBLIC_SUPABASE_URL: `http://127.0.0.1:${MOCK_PORT}`,
   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "sb_publishable_e2e",
+  // Canonical links, the sitemap and share images are absolute: point them at the app under test.
+  SITE_URL: `http://127.0.0.1:${APP_PORT}`,
   // Never reach Twitch or YouTube from tests, even with a developer's .env.local.
   TWITCH_CLIENT_ID: "",
   TWITCH_CLIENT_SECRET: "",

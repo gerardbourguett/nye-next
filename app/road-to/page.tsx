@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { getRelayBands } from "@/data/relay";
 import { editionTag, editionYear } from "@/lib/edition";
 import { requestEdition } from "@/lib/edition-server";
+import { previewSocial } from "@/lib/preview-metadata";
 import { parseSimulation } from "@/lib/relay-clock";
 import { cachedRelaySchedule } from "@/lib/streams/server";
 import { crossingStreams, type CrossingStreams } from "@/lib/streams/relay-link";
@@ -15,12 +16,17 @@ export async function generateMetadata({ searchParams }: PageProps<"/road-to">):
   const { at, speed } = await searchParams;
   const simulation = parseSimulation(at, speed);
   const year = simulation ? editionYear(simulation.at) : await requestEdition();
+  const description = `Every place on Earth, ordered by when its own midnight crosses into ${year} — from the first timezone to reach it to the last.`;
+  const previewTitle = `The Relay (preview) | ${editionTag(year)}`;
   return {
     // A preview may show another edition than the root template's, so it
-    // names its own year and is kept out of search results.
-    title: simulation ? { absolute: `The Relay (preview) | ${editionTag(year)}` } : "The Relay",
-    description: `Every place on Earth, ordered by when its own midnight crosses into ${year} — from the first timezone to reach it to the last.`,
-    ...(simulation && { robots: { index: false, follow: false } }),
+    // names its own year (also when shared) and is kept out of search results.
+    title: simulation ? { absolute: previewTitle } : "The Relay",
+    description,
+    // A preview is not the page: no canonical, and out of search results.
+    ...(simulation
+      ? { robots: { index: false, follow: false }, ...previewSocial(year, previewTitle, description) }
+      : { alternates: { canonical: "/road-to" } }),
   };
 }
 

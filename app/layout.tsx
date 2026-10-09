@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { ThemeProvider } from "@/components/theme-provider";
 import { editionTag } from "@/lib/edition";
 import { requestEdition } from "@/lib/edition-server";
+import { siteUrl } from "@/lib/site";
 
 // Board type, city names, and all display numerals. The Google Fonts
 // catalog available to this Next.js version consolidated the old separate
@@ -30,6 +31,8 @@ export async function generateMetadata(): Promise<Metadata> {
   const year = await requestEdition();
   const tag = editionTag(year);
   return {
+    // Relative canonical, Open Graph and image URLs resolve against this.
+    metadataBase: siteUrl(),
     title: { default: tag, template: `%s | ${tag}` },
     description: `Midnight isn't a moment, it's a 26-hour relay. Watch every timezone cross into ${year} one by one and catch vanderfondi's live New Year's Eve broadcast at twitch.tv/vanderfondi.`,
     openGraph: {
@@ -38,6 +41,11 @@ export async function generateMetadata(): Promise<Metadata> {
         "Follow midnight as it crosses the planet, timezone by timezone, and catch the hour's stream lineup from vanderfondi's live New Year's Eve broadcast.",
       siteName: tag,
       type: "website",
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: tag,
+      description: "Follow midnight as it crosses the planet, timezone by timezone, and catch the hour's stream lineup from vanderfondi's live New Year's Eve broadcast.",
     },
   };
 }
