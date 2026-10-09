@@ -84,6 +84,15 @@ const queryLength = (text: string) => new URLSearchParams({ k: text }).toString(
  * percent-encoded length in the query string (what a server's request-line
  * limit sees). A key too long for what is left is skipped; later ones may fit.
  */
+/**
+ * How old a CDN-shared answer is, from its `Age` header: whole seconds, or 0 when absent or odd.
+ * The schedule carries the server's clock, so a shared answer has to be aged by this much.
+ */
+export function ageSeconds(header: string | null): number {
+  const age = header !== null && /^\d{1,5}$/.test(header.trim()) ? Number(header.trim()) : 0;
+  return Math.min(age, 300);
+}
+
 export function capLiveKeys(keys: Iterable<string>, maxKeys = 24, maxEncoded = 6_000): string[] {
   const kept: string[] = [];
   let size = 0;

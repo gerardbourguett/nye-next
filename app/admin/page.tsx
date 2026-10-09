@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { StreamShell } from "@/components/streams/shell";
 import { adminAccess, SLOT_FIELDS } from "@/lib/streams/server";
+import { decodeChanges, type SlotChange } from "@/lib/streams/changes";
 import { decodeSlots, formatDuration, optionKey, UUID, type Slot, type StreamOption } from "@/lib/streams/domain";
 import { cityFromZoneName } from "@/lib/zones";
 import bundledZones from "@/data/timezones.json";
@@ -49,6 +50,21 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
     }
   } catch { failure = "The schedule or requested slot could not be loaded. Reload, or return to the schedule manager."; }
 
+  // The log is a view of what the database recorded; the page works without it (for example before its migration is applied).
+  let changes: SlotChange[] = [];
+  let me: string | null = null;
+  let logNote = "";
+  try {
+    const [{ data, error }, { data: auth }] = await Promise.all([
+      client.from("stream_slot_changes").select("id,changed_at,changed_by,operation,slot_id,before,after")
+        .order("changed_at", { ascending: false }).order("id", { ascending: false }).limit(50),
+      client.auth.getUser(),
+    ]);
+    if (error) throw new Error("Change log unavailable");
+    changes = decodeChanges(data);
+    me = auth.user?.id ?? null;
+  } catch { logNote = "The change log could not be loaded. If it was never set up, apply the latest database migration."; }
+
   return <StreamShell admin title="Schedule manager." description="Build the running order, choose the alternatives, and publish each hour when it is ready.">
     <div className={styles.actions}><SignOut /><Link href="/admin">Reload schedule / new slot</Link></div>
     <section className={styles.section}>
@@ -63,6 +79,19 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
           <Link className={styles.button} href={`/admin?edit=${slot.id}`}>Edit<span className="sr-only"> {slot.title}</span></Link>
         </div>
         <DeleteSlot id={slot.id} title={slot.title} />
+      </li>)}</ol>
+    </section>
+    <section className={styles.section} aria-labelledby="recent-changes">
+      <div className={styles.sectionHeading}><h2 id="recent-changes">Recent changes</h2><p className={styles.muted}>Latest 50 · UTC · recorded by the database</p></div>
+      {logNote && <p role="status" className={styles.notice}>{logNote}</p>}
+      {!logNote && !changes.length && <p className={styles.muted}>No changes recorded yet.</p>}
+      <ol className={styles.schedule}>{changes.map((change) => <li key={change.id}>
+        <div className={styles.row}>
+          <div className={styles.time}><time dateTime={change.changedAt}>{new Date(change.changedAt).toISOString().slice(0, 16).replace("T", " ")} UTC</time>
+            <p className={styles.muted}>{change.changedBy === null ? "Database or service" : change.changedBy === me ? "You" : `Admin ${change.changedBy.slice(0, 8)}`}</p></div>
+          <div><h3>{change.title}</h3><p className={styles.muted}>{change.summary}</p></div>
+          {change.operation === "delete" ? <span className={styles.muted}>Deleted</span> : <Link className={styles.button} href={`/admin?edit=${change.slotId}`}>Open<span className="sr-only"> {change.title}</span></Link>}
+        </div>
       </li>)}</ol>
     </section>
   </StreamShell>;

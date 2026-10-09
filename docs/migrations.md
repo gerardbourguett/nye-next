@@ -1,6 +1,6 @@
 # Migraciones de la base de datos
 
-Las migraciones están en `supabase/migrations/` y se aplican en orden por nombre.
+Las migraciones están en `supabase/migrations/` (la más reciente, `202610090001_slot_change_log.sql`, añade el registro de cambios del administrador; véase `operations.md`) y se aplican en orden por nombre.
 Hasta ahora se ejecutaban a mano en el SQL Editor; esto describe cómo comprobarlas
 en cada pull request y cómo aplicarlas desde GitHub.
 

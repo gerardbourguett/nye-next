@@ -1,0 +1,44 @@
+name: IANA timezone sync
+
+# Calls the protected `timezone-sync` Edge Function once a day, as an
+# alternative to the Supabase Cron job (docs/timezone-sync-setup.md). It needs
+# no database extensions or Vault: only the three settings below. The job
+# fails, and GitHub notifies you, when the function does not answer 200.
+on:
+  schedule:
+    - cron: "15 3 * * *" # 03:15 UTC, like the Cron job
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: timezone-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: Synchronise the catalog
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # Not set up here: skip instead of failing every day.
+    if: ${{ vars.SUPABASE_URL != '' }}
+    steps:
+      - name: Call the function
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+          TIMEZONE_SYNC_SECRET: ${{ secrets.TIMEZONE_SYNC_SECRET }}
+        run: |
+          set -uo pipefail
+          status=$(curl -sS -o response.json -w '%{http_code}' --max-time 90 -X POST \
+            -H "apikey: ${SUPABASE_PUBLISHABLE_KEY}" \
+            -H "x-timezone-sync-secret: ${TIMEZONE_SYNC_SECRET}" \
+            -H 'Content-Type: application/json' -d '{}' \
+            "${SUPABASE_URL%/}/functions/v1/timezone-sync") || status="no response"
+          # The body is only {"code": "..."}: a bounded, sanitised reason.
+          echo "HTTP ${status}: $(head -c 300 response.json 2>/dev/null)"
+          if [ "${status}" != "200" ]; then
+            echo "::error::The timezone sync did not succeed (HTTP ${status}). The last valid catalog stays in use."
+            exit 1
+          fi

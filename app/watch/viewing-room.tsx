@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTheme } from "next-themes";
-import { activeSlot, capLiveKeys, decodeSlots, embedUrl, HOUR_MS, MAIN_CHANNEL, optionKey, providerName, providerUrl, reconcilePlayback,
+import { activeSlot, ageSeconds, capLiveKeys, decodeSlots, embedUrl, HOUR_MS, MAIN_CHANNEL, optionKey, providerName, providerUrl, reconcilePlayback,
   selectedOption, streamHost, type PlaybackState, type Slot, type StreamOption } from "@/lib/streams/domain";
 import { SimulationNotice } from "@/components/simulation-notice";
 import { readClock, simulationQuery, type Simulation } from "@/lib/relay-clock";
@@ -55,7 +55,8 @@ export function ViewingRoom({ requested: initialRequest = null, simulation = nul
       const sentAt = Date.now();
       if (simAt !== null) params.set("at", new Date(readClock({ at: simAt, speed }, anchor.current, sentAt)).toISOString());
       const query = params.size ? `?${params}` : "";
-      const response = await fetch(`/watch/schedule${query}`, { cache: "no-store", credentials: "omit",
+      // Default cache mode: `no-store` would add `Cache-Control: no-cache` to the request and ask the CDN to skip its shared copy.
+      const response = await fetch(`/watch/schedule${query}`, { credentials: "omit",
         signal: AbortSignal.any([controller.signal, AbortSignal.timeout(12_000)]) });
       if (!response.ok) throw new Error("Unavailable");
       const value: unknown = await response.json();
@@ -63,7 +64,8 @@ export function ViewingRoom({ requested: initialRequest = null, simulation = nul
           typeof value.serverNow !== "number" || !Number.isFinite(value.serverNow)) throw new Error("Invalid schedule");
       const slots = decodeSlots(value.slots).filter((slot) => slot.published);
       if (!controller.signal.aborted) {
-        setSnapshot({ slots, serverNow: value.serverNow, receivedAt: Date.now(), sentAt, askedFor });
+        // A shared (CDN) answer carries the server's clock from when it was made: age it by the time it has waited.
+        setSnapshot({ slots, serverNow: value.serverNow + ageSeconds(response.headers.get("age")) * 1_000, receivedAt: Date.now(), sentAt, askedFor });
         setError(false);
       }
     } catch {

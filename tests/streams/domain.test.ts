@@ -303,3 +303,15 @@ test("status keys are capped by count and by their percent-encoded length", () =
   // An oversized key is skipped, not allowed to block the smaller ones after it.
   assert.deepEqual(capLiveKeys(["twitch:a", `hls:https://cdn.example.com/${"/".repeat(2_500)}`, "twitch:b"]), ["twitch:a", "twitch:b"]);
 });
+
+import { ageSeconds } from "../../lib/streams/domain";
+
+test("a shared answer's age comes from the Age header, whole seconds only, and is bounded", () => {
+  assert.equal(ageSeconds(null), 0);
+  assert.equal(ageSeconds("7"), 7);
+  assert.equal(ageSeconds(" 12 "), 12);
+  assert.equal(ageSeconds("-3"), 0);
+  assert.equal(ageSeconds("1.5"), 0);
+  assert.equal(ageSeconds("abc"), 0);
+  assert.equal(ageSeconds("99999"), 300);
+});

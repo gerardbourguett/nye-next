@@ -178,6 +178,10 @@ omite RLS; verifique por separado los roles indicados más abajo.
 
 ## 4. Activar la programación diaria
 
+> **Alternativa sin Cron ni Vault:** el flujo de GitHub Actions `timezone-sync.yml` hace la
+> misma llamada diaria (véase [`operations.md`](operations.md)). Use esa opción **o** la
+> tarea de Cron de esta sección, no ambas.
+
 Después de una primera sincronización correcta, ejecute
 [`supabase/manual/timezone-cron.sql`](../supabase/manual/timezone-cron.sql).
 Reemplaza solo la tarea `timezone-iana-daily`, por lo que volver a ejecutarlo no crea

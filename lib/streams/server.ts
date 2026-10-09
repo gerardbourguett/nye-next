@@ -4,6 +4,7 @@ import { createAuthClient } from "@/lib/supabase/server";
 import { supabaseConfig, uncachedFetch } from "@/lib/supabase/config";
 import { authorizeAdmin } from "./authorization";
 import { decodeSlots, HOUR_MS, MIN_SLOT_MS, UUID, type Slot } from "./domain";
+import { ttlCache } from "../ttl-cache";
 import { editionStreamWindow } from "./relay-link";
 
 export const SLOT_FIELDS = "id,title,starts_at,ends_at,published,options";
@@ -92,3 +93,6 @@ export async function relaySchedule(year: number) {
   }
   return slots;
 }
+
+/** `relaySchedule` shared for 30 seconds per edition within a server instance (a failure is not remembered). */
+export const cachedRelaySchedule = ttlCache(relaySchedule, 30_000);

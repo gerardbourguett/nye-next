@@ -4,7 +4,7 @@ import { getRelayBands } from "@/data/relay";
 import { editionTag, editionYear } from "@/lib/edition";
 import { requestEdition } from "@/lib/edition-server";
 import { parseSimulation } from "@/lib/relay-clock";
-import { relaySchedule } from "@/lib/streams/server";
+import { cachedRelaySchedule } from "@/lib/streams/server";
 import { crossingStreams, type CrossingStreams } from "@/lib/streams/relay-link";
 import { loadRelayCatalog } from "@/lib/timezones/server";
 import { RelayBoard } from "./relay-board";
@@ -28,7 +28,7 @@ export async function generateMetadata({ searchParams }: PageProps<"/road-to">):
 // only hides the per-crossing stream links.
 async function loadCrossingStreams(year: number): Promise<CrossingStreams> {
   try {
-    return crossingStreams(await relaySchedule(year), year);
+    return crossingStreams(await cachedRelaySchedule(year), year);
   } catch {
     return {};
   }

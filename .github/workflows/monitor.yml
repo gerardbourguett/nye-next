@@ -1,0 +1,50 @@
+name: Monitor
+
+# Every 30 minutes: do the public pages answer, can the schedule be read, and is
+# the timezone catalog still being refreshed? A failed run is the alert (GitHub
+# emails whoever last edited the schedule below). Set the repository variable
+# SITE_URL (for example https://your-site.example) to switch it on.
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: monitor
+  cancel-in-progress: true
+
+jobs:
+  site:
+    name: Site health
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: ${{ vars.SITE_URL != '' }}
+    steps:
+      - name: Check the site
+        env:
+          SITE_URL: ${{ vars.SITE_URL }}
+          # Set the repository variable CATALOG_SYNC to "false" if the daily timezone sync is not set up.
+          CATALOG_SYNC: ${{ vars.CATALOG_SYNC }}
+        run: |
+          set -uo pipefail
+          base="${SITE_URL%/}"
+          failed=0
+          for path in / /road-to /watch; do
+            code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 25 --retry 2 --retry-delay 5 "${base}${path}") || code="no response"
+            if [ "${code}" = "200" ]; then echo "ok    ${path}"; else echo "::error::${path} answered ${code}"; failed=1; fi
+          done
+          code=$(curl -sS -o health.json -w '%{http_code}' --max-time 30 --retry 2 --retry-delay 5 "${base}/health") || code="no response"
+          echo "/health answered ${code}: $(head -c 300 health.json 2>/dev/null)"
+          schedule=$(jq -r '.schedule // "invalid"' health.json 2>/dev/null || echo invalid)
+          catalog=$(jq -r '.catalog // "invalid"' health.json 2>/dev/null || echo invalid)
+          # Only an explicit "ok" passes: unconfigured, unknown or anything unexpected is a problem too.
+          if [ "${code}" != "200" ] || [ "${schedule}" != "ok" ]; then
+            echo "::error::The schedule is not confirmed readable (/health: HTTP ${code}, schedule ${schedule}). The viewing room may be down."; failed=1
+          fi
+          if [ "${catalog}" != "ok" ] && [ "${CATALOG_SYNC:-true}" != "false" ]; then
+            echo "::error::The timezone catalog is ${catalog}, not ok: the daily sync has stopped or never ran. Check it, or set the CATALOG_SYNC variable to false."; failed=1
+          fi
+          exit "${failed}"
