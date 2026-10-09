@@ -65,6 +65,32 @@ async function main() {
     fail(`/health is not readable: ${error instanceof Error ? error.message : error}`);
   }
 
+  // What search engines and link previews read.
+  try {
+    const local = /^(localhost|127\.0\.0\.1)$/.test(base.hostname);
+    const robots = await get("/robots.txt");
+    if (robots.status === 200 && robots.body.includes("Disallow: /admin") && /^Sitemap: https?:\/\//m.test(robots.body)) ok("/robots.txt keeps /admin out and names the sitemap");
+    else fail("/robots.txt is missing, or does not disallow /admin and name the sitemap");
+    const sitemap = await get("/sitemap.xml");
+    const locs = [...sitemap.body.matchAll(/<loc>([^<]+)<\/loc>/g)].map((match) => match[1]);
+    if (sitemap.status !== 200 || locs.length < 3) fail(`/sitemap.xml lists ${locs.length} page(s)`);
+    else if (!local && locs.some((loc) => /\/\/(localhost|127\.0\.0\.1)/.test(loc))) fail("/sitemap.xml points to localhost: set SITE_URL (or the production domain on Vercel)");
+    else ok(`/sitemap.xml lists ${locs.length} pages`);
+    const home = (await get("/")).body;
+    const canonical = /<link rel="canonical" href="([^"]+)"/.exec(home)?.[1];
+    if (!canonical || (!local && /\/\/(localhost|127\.0\.0\.1)/.test(canonical))) fail(`the home page canonical link is ${canonical ?? "missing"}`);
+    else ok(`home canonical link: ${canonical}`);
+    const image = /<meta property="og:image" content="([^"]+)"/.exec(home)?.[1];
+    if (!image) fail("the home page has no og:image");
+    else {
+      const response = await fetch(image, { signal: AbortSignal.timeout(20_000) });
+      if (response.status === 200 && response.headers.get("content-type") === "image/png") ok("the share image (og:image) loads as a PNG");
+      else fail(`the share image answered ${response.status} (${response.headers.get("content-type")}) at ${image}`);
+    }
+  } catch (error) {
+    fail(`the search and share checks failed: ${error instanceof Error ? error.message : error}`);
+  }
+
   const keys = new Set<string>([`twitch:${MAIN_CHANNEL}`]);
   try {
     const { status, body } = await get("/watch/schedule");

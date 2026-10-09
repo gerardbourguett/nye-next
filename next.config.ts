@@ -8,6 +8,8 @@ const STATIC_ASSETS = "public, max-age=86400, stale-while-revalidate=604800";
 const nextConfig: NextConfig = {
   async headers() {
     return [
+      // Data for the pages and for monitors, not for search results.
+      ...["/health", "/watch/live", "/watch/schedule"].map((source) => ({ source, headers: [{ key: "X-Robots-Tag", value: "noindex" }] })),
       { source: "/maps/:path*", headers: [{ key: "Cache-Control", value: STATIC_ASSETS }] },
       { source: "/flags/:path*", headers: [{ key: "Cache-Control", value: STATIC_ASSETS }] },
     ];

@@ -20,7 +20,7 @@ lleguen al servidor y ejecute:
 pnpm check:deployment https://su-sitio --require-providers
 ```
 
-Comprueba que las páginas (y sus vistas previas `?at=&speed=`) respondan, que la
+Comprueba que las páginas (y sus vistas previas `?at=&speed=`) respondan, que `robots.txt`, el mapa del sitio, la canónica y la imagen para compartir sean correctos (`docs/seo.md`), que la
 programación se lea de la base real, que las credenciales hayan llegado al servidor y
 qué informa cada transmisión programada: `LIVE`, `offline` o `unconfirmed`.
 `unconfirmed` es lo correcto cuando el proveedor no pudo confirmar nada; nunca debe

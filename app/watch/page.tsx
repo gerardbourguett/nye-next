@@ -14,7 +14,12 @@ export async function generateMetadata({ searchParams }: PageProps<"/watch">): P
   // A preview may show another edition than the root template's, so it names its own year.
   return simulation
     ? { title: { absolute: `Viewing room (preview) | ${editionTag(editionYear(simulation.at))}` }, robots: { index: false, follow: false } }
-    : { title: "Viewing room" };
+    : {
+      title: "Viewing room",
+      description: "Choose what to watch as New Year moves around the world: the stream on now, what is coming up, and the chat, one player at a time.",
+      // Deep links from the relay (?slot=&stream=) are the same page.
+      alternates: { canonical: "/watch" },
+    };
 }
 
 export default async function WatchPage({ searchParams }: PageProps<"/watch">) {

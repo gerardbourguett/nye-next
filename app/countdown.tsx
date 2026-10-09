@@ -81,6 +81,9 @@ export function Countdown({ initialYear, simulation }: { initialYear: number; si
           #{year}
           <span className="text-emerald-500 animate-pulse">Live</span>
         </h1>
+        <p className="max-w-xl text-balance text-sm text-muted-foreground">
+          Follow the countdown to January 1, {year}, and watch midnight cross every timezone.
+        </p>
         {countdown?.arrived && (
           <p role="status" className="text-lg text-balance">
             It&rsquo;s {year} here. Midnight is still crossing the planet.
